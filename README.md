@@ -4,7 +4,7 @@
 </p> 
 
 <h2 align="left">Description of the Repository</h2>
-This repository contains the data and code used in the paper "Characterizing and Projecting Internal Phosphorus Loading through Bayesian Mass-balance Modeling". The details of the four subrepositories are as follows:
+This repository contains the data and code used in the paper "Characterizing and Projecting Internal Phosphorus Loading through Bayesian Mass-balance Modeling". The details of the three subrepositories are as follows:
 
 | Sub-repositories | Description|
 |:--------------------|:------------------------|
