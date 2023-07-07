@@ -22,9 +22,10 @@ Install Git, R, and RStudio from respective websites. To link Git to RStudio, op
 
 <h2 align="left">How to run the model</h2>
 
-Step 1 : In the top-right corner of this page, click _Fork_. Under _Owner_, select the dropdown menu and click an owner for the forked repository. By default, forks are named the same as their upstream repositories. Optionally, to further distinguish your fork, in the _Repository name_ field, type a name. Click _Create fork_. A forked repository will be created in your GitHub account.</br> 
-Step 2: Click on _Code_ icon in the forked repository to copy the HTTPS url. The link will be something like https://github.com/yourusername/rstudio-git-test.git.
-Step 2 : Open RStudio and click _New Project..._ from _File_. Select _Version Control_ and _Git_. In the _Repository URL_, enter the URL of the forked repository from your GitHUb account. Next, enter a _Project directory name_ and select the directory in which the you wants to store the R project. Select _Create Project_</br>
-Step 3 : Run the codes stored in _JLPMv016p001.Rmd_ to _JLPMv016p010.Rmd_ in _Pmodels_ repository.  
+Step 1 : In the top-right corner of this page, click _Fork_. Under _Owner_, select the dropdown menu and click an owner for the forked repository. By default, forks are named the same as their upstream repositories. Optionally, to further distinguish your fork, in the _Repository name_ field, type a name. Click _Create fork_. A forked repository will be created in your GitHub account.</br> </br>
+Step 2: Click on _Code_ icon in the forked repository to copy the HTTPS url. The HTTPS url will be something like https://github.com/SmitomB/Internal_Phosphorus_Loading_Model.git. </br></br>
+Step 3 : Open RStudio and click _New Project..._ from _File_. Select _Version Control_ and _Git_. In the _Repository URL_, enter the HTTPS URL of the forked repository from your GitHUb account. Next, enter a _Project directory name_ and select the directory in which the you want to store the R project. Select _Create Project_</br></br>
+Step 4 : Run the codes stored in _JLPMv016p001.Rmd_ to _JLPMv016p010.Rmd_ in _Pmodels_ repository.   
+
 
 
