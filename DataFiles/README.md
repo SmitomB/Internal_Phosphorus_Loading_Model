@@ -16,3 +16,4 @@ This repository contains various data files that were used while running differe
 |Segment2_Pdata.xlsx| P concentration data in Segment 2|
 |Segment3_Pdata.xlsx| P concentration data in Segment 3|
 |Segment4_Pdata.xlsx| P concentration data in Segment 4|
+|HypolimnionCalcs.xlsx| Data on mid depth of each segment over the years|
