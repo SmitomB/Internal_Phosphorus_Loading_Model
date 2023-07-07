@@ -11,3 +11,4 @@ This repository contains the data and code used in the paper "Characterizing and
 |DataFiles| Data files such as .csv, .xlsx, .txt are stored in this folder.|
 |Pmodels| All the models are stored in this folder. |
 |RWorkSpaces| R workspaces used to run the model.|
+|OutputFiles| Contains the html versions of the P models|
