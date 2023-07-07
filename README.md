@@ -9,6 +9,5 @@ This repository contains the data and code used in the paper "Characterizing and
 | Sub-repositories | Description|
 |:--------------------|:------------------------|
 |DataFiles| Data files such as .csv, .xlsx, .txt are stored in this folder.|
-|OutputFiles| All the markdown files, plots and data generated from the models are stored in this folder. |
 |Pmodels| All the models are stored in this folder. |
 |RWorkSpaces| R workspaces used to run the model.|
