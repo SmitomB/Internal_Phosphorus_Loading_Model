@@ -10,3 +10,5 @@ This repository contains various data files that were used while running differe
 |predBoSuP_Seg2RF4.csv| Predicted bottom to surface P ratios in Segment 2|
 |predBoSuP_Seg3RF4.csv| Predicted bottom to surface P ratios in Segment 3|
 |predBoSuP_Seg4RF4.csv| Predicted bottom to surface P ratios in Segment 4|
+|Sim_BottomWaterTemp_daily.csv| 14d average bottom water temperature data|
+|Sim_SurfaceWaterTemp_daily.csv| 35d average surface water temperature data|
