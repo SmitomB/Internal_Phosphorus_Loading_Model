@@ -11,7 +11,7 @@ This repository contains the data and code used in the paper "Characterizing and
 |OutputFiles| Contains the html versions of the P models|
 
 <h2 align="left">How to run the model</h2>
-Step 1 : Fork this repository.
+Step 1 : Fork this repository.  
 Step 2 : Run the codes stored in _JLPMv016p001.Rmd_ to _JLPMv016p010.Rmd_ in _Pmodels_ repository.  
 
 
