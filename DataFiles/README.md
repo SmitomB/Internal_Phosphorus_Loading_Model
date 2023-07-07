@@ -4,6 +4,9 @@ This repository contains various data files that were used while running differe
 
 |File Name|Description|
 |-------------|-----------------------------------|
-|TP Monthly Watershed Loading_dro 11_15.xlsx| description coming soon|
-|Model inputs Processed V5.xlsx| description coming soon|
-|lakeOmidM_no19v2.csv| description coming soon|
+|TP Monthly Watershed Loading_dro 11_15.xlsx| Input data to the model: P concentration in the inflow|
+|Model inputs Processed V5.xlsx| Input data to the model: area, volume, flows, depth, and bottom temperature|
+|lakeOmidM_no19v2.csv| Observed P data in the reservoir|
+|predBoSuP_Seg2RF4.csv| Predicted bottom to surface P ratios in Segment 2|
+|predBoSuP_Seg3RF4.csv| Predicted bottom to surface P ratios in Segment 3|
+|predBoSuP_Seg4RF4.csv| Predicted bottom to surface P ratios in Segment 4|
