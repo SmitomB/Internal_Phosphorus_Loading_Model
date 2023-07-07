@@ -49,7 +49,7 @@ Time required to run the entire notebook: ~3 hrs
 
 
 # Motivation
-The codes in this R notebook are the codes used to prepare the results and discussion in the paper. Most of the codes are taken from the version 10 (and version 15) of this model. A new version was needed as the previous version (version 15) had too many modifications and experimentation, making that version less tractable.
+The codes in this R notebook are the codes used to prepare the results and discussion in the paper. 
 
 # Edit log
 
@@ -97,12 +97,10 @@ The terms used in the preceding equations are described as follows:\
 | Q~i,i+1~   | Flow from segment i to the downstream segment (varies with time)                                  | 10^6^m^3^/month |
 
 # Packages
-
-A number of packages are loaded to run the model. However, there can be some curtailing in their numbers. Not all the packages are equally important for this model to run smoothly. The most important package is the ODIN package which helps us solve differential equations (1 and 3) efficiently.
+Let us load the packages needed to run the code.
 
 ```{r clearing environment, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
-# SSB: Clearing the global environment----
-# rm(list = ls())
+# Clearing the global environment----
 cat("\014"); rm(list=ls(all=TRUE)); graphics.off()
 ```
 
@@ -114,12 +112,11 @@ Start_timer1 <- Sys.time()
 
 ```{r Packages, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 # Loading packages----
-# DDG: ODIN cannot be installed like other packages and requires this process
 if (!require("pacman")) install.packages("pacman");pacman::p_load(shinyjs,threejs,brms,minpack.lm,MuMIn,lme4, penalized,zoo,RColorBrewer,
   gridExtra,rowr,stringi,optimx,Hmisc,leaps,caret,magrittr,plotly,remotes,RcppRoll,suncalc,adaptMCMC,TTR, truncnorm, readxl,lubridate, data.table,deSolve,zoo,tidyverse,gridExtra, viridis, RColorBrewer)
 
 
-# SSB : To print all the columns of the tibble
+# To print all the columns of the tibble
 options(tibble.width = Inf)    
 
 ```
@@ -143,19 +140,19 @@ The data required for this model has been stored in a number of files. These fil
 # Seed value
 eff_se1 <- 5000  
 
-# DDG: can load previous MCMC results
+# load previous MCMC results
 load("RWorkSpaces/PcalMidM_no19v2.RData")
 
 
 # the previous optimum parameters as the initial values.
 prev_opt <- opt_prm
 
-# Hydrological model input; data based on SSB's values
+# Hydrological model input
 RoutMOdin <- read_excel('DataFiles/Model Inputs Processed V5.xlsx', sheet = "Model Inputs Processed V5")
 
 RoutMOdin$yrmo <- paste0(RoutMOdin$mo,"/",RoutMOdin$year)
 
-RoutMOdin = RoutMOdin %>% arrange(t)#don't let it sort by "yrmo" like it defaults to
+RoutMOdin = RoutMOdin %>% arrange(t)# don't let it sort by "yrmo" like it defaults to
 
 # DDG: start and end month of simulation
 st.mo="1/1983"
@@ -168,22 +165,22 @@ tmax=which(RoutMOdin[,"yrmo"]==end.mo)-which(RoutMOdin[,"yrmo"]==st.mo)+1 # DDG:
 # Rearranging RoutMOdin
 RoutMOdin=RoutMOdin[(which(RoutMOdin[,"yrmo"]==st.mo)):which(RoutMOdin[,"yrmo"]==end.mo),]
 
-# SSB: the t column is reassigned to have continuously increasing natural numbers
+# the t column is reassigned to have continuously increasing natural numbers
 RoutMOdin$t = c(1:tmax)
 
 
-# DDG: transformation parameters here for box-cox transformation
+# transformation parameters here for box-cox transformation
 l1 = 0
 l2 = 0
 
-# DDG: custom functions loaded here
-suppressMessages(source("Pmodels/JLPMfunv16p001.R"))  # Same as functionsJorLak_Aug22.R but renamed
+# custom functions loaded here
+suppressMessages(source("Pmodels/JLPMfunv16p001.R"))  
 
-# Fix watersheds concentrations using Dn's spreadsheet(inspiration: sceChl_oc19)
+# Fix watersheds concentrations using Dn's spreadsheet
 read_excel("DataFiles/TP Monthly Watershed Loading_dro 11_15.xlsx",'Segment loads', range = "A2:S434",col_names =T) %>%
   dplyr::select(yrmo,C1in,C2in,C3in,C4in) -> updConc
 
-# SSB: Adding the correct inflow P concentration
+# Adding the correct inflow P concentration
 RoutMOdin %<>% dplyr::select(-C1in,-C2in,-C3in,-C4in) %>%
   left_join(.,updConc)
 
@@ -278,29 +275,6 @@ S1init = (.544*10^6)
 S2init = (.589*10^6)
 S3init = (.789*10^6)
 S4init = (.276*10^6)
-
-#average sediment conc. in kg/m^2 = .0456
-#sd of average sediment conc in kg/m^2 = .0250
-#values calculated in "lake Sediment P concentration.xlsx"
-#Here we apply these average values of sediment concentration to each of the areas of the 4 segments
-#this produces an expected initial value of P in kg. 
-#these values are listed above in S1init-S4init
-#The intial concentration and sd are then normalized to allow for a prior to shape the factors for these values later on
-#seg1
-# smplavg = .0456* 11.94*10^6
-# smplesd = .0250* 11.94*10^6
-
-#seg2
-# smplavg = .0456* 12.92*10^6
-# smplesd = .0250* 12.92*10^6
-
-#seg3
-# smplavg = .0456* 17.28*10^6
-# smplesd = .0250* 17.28*10^6
-
-#seg4
-# smplavg = .0456* 6.057*10^6
-# smplesd = .0250* 6.057*10^6
 
 # Remember: Wsh inflows (Mm3/mo); Conc inputs (mg/m^3)	
 ```
@@ -432,6 +406,7 @@ lakemod_v0 <- odin::odin({
 ```
 
 # Setting up test parameters
+Let us set up test parameters to check whether the model is working.
 
 ```{r Settingup the parameters, message=FALSE, warning=FALSE}
 # Scaling factors
@@ -459,8 +434,6 @@ To make it easier to change the model parameters and read the model output, a fu
 -   **mod_fun**: the ODIN object created to solve the model equations
 -   **CalPar**: the list of parameters values used for the model
 -   **FixInp_lis**: the list of initial conditions and timestep\
-
-The mode_wrap_vO() first converts the model parameter values back to its original values and stores them, together with auxilary variables values and initial conditions, in a new object called OmnImp. This variable serves as the input values for the user() used in the ODIN model setup. Consequently, after suppressing the warnings for running the ODIN object for tmax times, the results of P mass in water column and sediments are stored in a data frame called y_c. This data frame is further merged with certain columns of RoutMOdin\$V1. Furthermore, using the surface modifiers, the concentrations of P in all the 4 segments are calculated and stored in the y_c data frame, replacing all the previous values. y_c is further rearranged similar to obs data frame using melt function and merged with the obs data frame to get the final output which contains the P concentrations both in the water column and sediments.\
 
 ```{r Model wrap, echo=TRUE, message=FALSE, warning=FALSE}
 # Preparing the input as lists of parameters
@@ -652,8 +625,9 @@ save.image("RWorkSpaces/JLPMv016p001_0.RData")
 
 ## Brief analysis of the MCMC model run
 ```{r MCMC results, echo=TRUE, message=FALSE, warning=FALSE}
+# Time taken to run the model
 time.taken.MCMC 
-# DDG: brief analysis of results
+# rief analysis of results
 cbind(RAM$samples,logpost= RAM$log.p) %>% as_tibble() %>% 
   mutate(Vs=Vs/vs_scal,Bs=Bs/par_scal,Rs=Rs/par_scal,Sh = Sh-Sh_shift) %>% tail(25000) %>% 
   as.matrix %>% sysanal.plot.chains()
@@ -663,7 +637,6 @@ post.param <- cbind(RAM$samples) %>% as_tibble() %>% tail(25000) %>% summarise_a
 post.param.names <- c("Vs", "Ks", "Bs", "Rs", "Sh", "ThetaR", "ThetaV", "S1fac", "sy")
 opt_prm <- setNames(post.param, post.param.names)
 
-# opt_prm  <- RAM$samples[which.max(RAM$log.p),]
 opt_prm 
 mod_wrap_v0(CalPar=opt_prm) %>% {VarExp(.[["value"]],.[["obs"]])}
 
@@ -836,10 +809,7 @@ PModPer
 
 # Data Visualization
 
-The data visualization of the model results are carried out in subsequent part.
-
-**Part 2:** 1. Prior and Posterior distribution 2. 1:1 Scatter plot 3. Mass Transfer plot 4. Sediment P release plot
-
+The data visualization of the model results are carried out in subsequent parts.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Start timer
