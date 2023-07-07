@@ -13,3 +13,6 @@ This repository contains various data files that were used while running differe
 |Sim_BottomWaterTemp_daily.csv| 35d average bottom air temperature data|
 |Sim_SurfaceWaterTemp_daily.csv| 14d average surface air temperature data|
 |RDU_windspeed.xlsx| Wind speed data|
+|Segment2_Pdata.xlsx| P concentration data in Segment 2|
+|Segment3_Pdata.xlsx| P concentration data in Segment 3|
+|Segment4_Pdata.xlsx| P concentration data in Segment 4|
