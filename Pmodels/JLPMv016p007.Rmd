@@ -1,0 +1,689 @@
+---
+title: "Jordan Lake Reservoir Model"
+subtitle: "Part7: Future trends (Visualizations) - 3"
+author: "Smitom Borah"
+date: "04/29/2023"
+output: 
+  html_notebook:
+    toc : yes
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+
+---
+
+```{=html}
+<style type="text/css">
+
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+  text-align: center;
+}
+
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+  text-align: center;
+}
+
+h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Red;
+  text-align: center;
+}
+
+</style>
+```
+
+Time required to run the entire notebook: ~ 20 secs
+
+# Motivation
+In this notebook, we visualize the future trends of TP in water and sediment columns under different climate scenarios. 
+
+```{r Packages, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# Clearing the working environment----
+cat("\014"); rm(list=ls(all=TRUE)); graphics.off()  
+
+# Start timer
+Start_timer7 <- Sys.time()
+
+# Loading the packages----
+if (!require("pacman")) install.packages("pacman") ;
+pacman::p_load(shinyjs,threejs,xlsx,minpack.lm,MuMIn,lme4,penalized,zoo,RColorBrewer,gridExtra,rowr,stringi,optimx,purrrlyr,Hmisc,leaps,caret,magrittr,plotly,remotes,RcppRoll,suncalc,adaptMCMC,TTR, truncnorm, readxl,lubridate, data.table,deSolve,zoo,tidyverse) 
+library(lubridate)
+library(signal)
+
+```
+
+
+# General Plotting specification
+To maintain the consistency in the plots developed in this notebook, we create a ggplot object to store the basic specification for each plot.
+
+```{r Gen Plot specifics, echo=TRUE, message=FALSE, warning=FALSE}
+# General plot specification
+plot_basics <- ggplot()+
+  theme_bw()+
+  theme(legend.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10),
+        legend.text = element_text(size = 10))
+```
+
+# Future trends with hydrological uncertainty obtained by taking mean values
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Loading just the csv files with monthly and annual projections
+## The saved workspaces from which the projections for two climate scenarios are
+## taken:
+## RCP 4.5 : "RWorkSpaces/JLPMv016p005_1.RData"
+## RCP 8.5 : "RWorkSpaces/JLPMv016p006_1.RData"
+
+
+## RCP 4.5
+## TP
+P1concL00.df <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16P1concL00.df.csv")
+P1concL00.df.ann <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16P1concL00.df.ann.csv")
+
+## Sed P
+SconcL00.df <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16SconcL00.df.csv")
+SconcL00.df.ann <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16SconcL00.df.ann.csv")
+
+## Sed P rel
+SresL00.df <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16SresL00.df.csv")
+
+
+## RCP 8.5
+## TP
+P1concH00.df <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16P1concH00.df.csv")
+P1concH00.df.ann <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16P1concH00.df.ann.csv")
+
+## Sed P
+## Sed P
+SconcH00.df <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16SconcH00.df.csv")
+SconcH00.df.ann <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16SconcH00.df.ann.csv")
+
+## Sed P rel
+SresH00.df <- read.csv("OutputFiles/JLPMv016FutProj/JLPM16SresH00.df.csv")
+
+
+```
+
+
+# plots
+```{r 90%PI plot, echo=TRUE, message=FALSE, warning=FALSE}
+# Plotting the results
+# RCP 4.5
+plot_basics+
+  geom_line(data = P1concL00.df, aes(x = seq(1,nrow(P1concH00.df)), y = `hyd50.`, color = "Median TP"))+
+  geom_ribbon(data = P1concL00.df, aes(x = seq(1,nrow(P1concH00.df)), ymin = `hyd5.`, ymax = `hyd95.`), fill = "black", alpha = 0.3)+
+  geom_ribbon(data = P1concL00.df, aes(x = seq(1,nrow(P1concH00.df)), ymin = `parhyd5.`, ymax = `parhyd95.`), fill = "green", alpha = 0.3)+
+  geom_ribbon(data = P1concL00.df, aes(x = seq(1,nrow(P1concH00.df)), ymin = `all5.`, ymax = `all95.`), fill = "red", alpha = 0.3)+
+  theme(legend.position = "bottom")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))
+
+# RCP 8.5
+plot_basics+
+  geom_line(data = P1concH00.df, aes(x = seq(1,nrow(P1concH00.df)), y = `hyd50.`, color = "Median TP"))+
+  geom_ribbon(data = P1concH00.df, aes(x = seq(1,nrow(P1concH00.df)), ymin = `hyd5.`, ymax = `hyd95.`), fill = "black", alpha = 0.3)+
+  geom_ribbon(data = P1concH00.df, aes(x = seq(1,nrow(P1concH00.df)), ymin = `parhyd5.`, ymax = `parhyd95.`), fill = "green", alpha = 0.3)+
+  geom_ribbon(data = P1concH00.df, aes(x = seq(1,nrow(P1concH00.df)), ymin = `all5.`, ymax = `all95.`), fill = "red", alpha = 0.3)+
+  theme(legend.position = "bottom")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))
+
+```
+
+```{r}
+# Annual predictions
+## RCP 4.5
+plot_basics+
+  geom_ribbon(data = P1concL00.df.ann, aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`), fill = "black", alpha = 0.4)+
+  geom_ribbon(data = P1concL00.df.ann, aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`), fill = "black", alpha = 0.3)+
+  geom_ribbon(data = P1concL00.df.ann, aes(x = Year, ymin = `all5.`, ymax = `all95.`), fill = "black", alpha = 0.2)+
+  geom_line(data = P1concL00.df.ann, aes(x = Year, y = `hyd50.`, color = "Median TP"))+
+  theme(legend.position = "none")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))+
+  scale_color_manual(values = c(`Median TP` = "red"))
+
+## RCP 8.5
+plot_basics+
+  geom_ribbon(data = P1concH00.df.ann, aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`), fill = "black", alpha = 0.4)+
+  geom_ribbon(data = P1concH00.df.ann, aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`), fill = "black", alpha = 0.3)+
+  geom_ribbon(data = P1concH00.df.ann, aes(x = Year, ymin = `all5.`, ymax = `all95.`), fill = "black", alpha = 0.2)+
+  geom_line(data = P1concH00.df.ann, aes(x = Year, y = `hyd50.`, color = "Median TP"))+
+  theme(legend.position = "none")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))+
+  scale_color_manual(values = c(`Median TP` = "red"))
+```
+
+
+```{r}
+# Combined plot
+## Scaling factor
+scale.fac <- 0.4
+
+## rescaling sed P vavlues
+### RCP 4.5
+SconcL00.df.ann.rs <- SconcL00.df.ann %>% mutate_at(.vars = vars(-("Year")), function(x)(x/scale.fac))
+### RCP 8.5
+SconcH00.df.ann.rs <- SconcH00.df.ann %>% mutate_at(.vars = vars(-("Year")), function(x)(x/scale.fac))
+
+# Annual predictions
+TPSProj_plot <- plot_basics+
+  geom_ribbon(data = SconcH00.df.ann.rs, aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`, fill = "SH00hyd"), alpha = 1, show.legend = FALSE)+
+  geom_ribbon(data = SconcH00.df.ann.rs, aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`, fill = "SH00parhyd"), alpha = 0.3, show.legend = FALSE)+
+  geom_ribbon(data = SconcH00.df.ann.rs, aes(x = Year, ymin = `all5.`, ymax = `all95.`, fill = "SH00all"), alpha = 0.3, show.legend = FALSE)+
+  
+  geom_ribbon(data = P1concH00.df.ann, aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`, fill = "TPH00hyd"), alpha = 0.8, show.legend = FALSE)+
+  geom_ribbon(data = P1concH00.df.ann, aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`, fill = "TPH00parhyd"), alpha = 0.6, show.legend = FALSE)+
+  geom_ribbon(data = P1concH00.df.ann, aes(x = Year, ymin = `all5.`, ymax = `all95.`, fill = "TPH00all"), alpha = 0.3, show.legend = FALSE)+
+  geom_line(data = P1concH00.df.ann, aes(x = Year, y = `hyd50.`, color = "P1H00"), show.legend = FALSE)+
+  geom_line(data = SconcH00.df.ann.rs, aes(x = Year, y = `hyd50.`, color = "SH00"), lty = 2, show.legend = FALSE)+
+  geom_line(data = P1concH00.df.ann[which(P1concH00.df.ann$Year %in% seq(1983,2018)),], aes(x = Year, y = `hyd50.`, color = "oriTP"))+
+  geom_line(data = SconcH00.df.ann.rs[which(SconcH00.df.ann.rs$Year %in% seq(1983,2018)),], aes(x = Year, y = `hyd50.`, color = "oriSedP"), lty = 2)+
+  scale_color_manual(values = c("P1H00" = "red",
+                                "SH00" = "red",
+                                "oriTP" = "black",
+                                "oriSedP" = "black"),
+                     labels = c("", "", expression(P[w]), expression(P[s])),
+                     guide = guide_legend(override.aes =
+                                            list(color = c(NA, NA,"black", "black"),
+                        linetype = c(1, 2, 1,2),
+                        shape = c( NA, NA, NA, NA),
+                        fill = rep("transparent", 4)),
+                        nrow = 2,
+                        ncol = 2))+
+  scale_y_continuous(name = expression(P[w]~"("*mu*g/L*")"),
+                       sec.axis = sec_axis(trans = ~(.*scale.fac) ,
+                                           name = expression(P[s]~(g/m^2)),
+                                           # breaks = c(0, 50,60, 70, 80,90, 100,150,200,250)),
+                                           breaks = seq(0, 150,20)),
+                     limits = c(0,320),
+                     breaks = seq(0,300, 50),
+                     expand = c(0, 0))+
+  scale_x_continuous(expand = c(0,0),
+                     breaks = c(1983, 2000, 2018, 2030, 2050, 2070, 2090 ))+
+  geom_vline(xintercept = 2018, lty = 3)+
+  theme(legend.position = c(0.6,0.92),
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10,color="black"),
+        axis.ticks = element_line(color = "black"),
+        # panel.background = element_rect(fill = "transparent"),
+        # plot.background = element_rect(fill = "transparent", color = NA),
+        legend.key = element_rect(fill = "transparent", colour = NA))+
+  scale_fill_manual(values = c("SH00hyd" = "cornsilk4",
+                                "SH00parhyd" = "cornsilk3",
+                                "SH00all" = "cornsilk3",
+                                "TPH00hyd" = "black",
+                               "TPH00parhyd" = "darkgrey",
+                                "TPH00all" = "darkgrey")
+                    # guide = guide_legend(override.aes = 
+                    #                         list(color = c("blue", "red", "black", "black"),
+                    #     linetype = c(1,1,1,3),
+                    #     shape = c(NA, NA, NA, NA)),
+                    #     nrow = 2,
+                    #     ncol = 2)
+                    )
+TPSProj_plot
+
+# Saving the file
+# png(file="OutputFiles/JLPMv016_TPSFutProj.png",width = 6, height = 4, units = 'in', res = 1200, bg = "transparent")
+# TPSProj_plot
+# dev.off()
+
+```
+# Saving the workspace
+```{r save file, echo=TRUE, message=FALSE, warning=FALSE}
+# Saving the file
+# Saving the file [05-11-2023 10:00 AM] 
+# save.image("RWorkSpaces/JLPMv016p007_1.RData")
+
+
+```
+
+# Sediment P release
+```{r}
+# RCP4.5
+sedPres_L00_sea <- SresL00.df 
+
+sedPres_L00_sea <- sedPres_L00_sea %>% 
+  mutate(Year = year(date)) %>% group_by(Year, Season) %>%
+  summarise_at(vars("hyd5.":"all_var"), funs(mean))
+
+sedPres_L00_sea$Season <- factor(sedPres_L00_sea$Season)
+sedPres_L00_sea.ori <- sedPres_L00_sea
+
+ggplot(data = sedPres_L00_sea)+
+  geom_line(aes(x = Year, y = `hyd50.`))+
+  geom_ribbon(aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`), alpha = 0.2)+
+  geom_ribbon(aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`), alpha = 0.2)+
+  geom_ribbon(aes(x = Year, ymin = `all5.`, ymax = `all95.`), alpha = 0.2)+
+  theme_bw()+
+  geom_vline(xintercept = year(as.Date('2018-12-01')),linetype ="dashed",size=.6)+
+  facet_wrap(vars(Season))+
+  labs(title = "Seasonal temperature variation in Jordan Lake",
+       x = "Year",
+       y = expression(Sediment~P~release))
+```
+```{r}
+# RCP8.5
+sedPres_H00_sea <- SresH00.df 
+
+sedPres_H00_sea <- sedPres_H00_sea %>% 
+  mutate(Year = year(date)) %>% group_by(Year, Season) %>%
+  summarise_at(vars("hyd5.":"all_var"), funs(mean))
+
+sedPres_H00_sea$Season <- factor(sedPres_H00_sea$Season)
+
+sedPres_H00_sea.ori <- sedPres_H00_sea
+
+ggplot(data = sedPres_H00_sea)+
+  geom_line(aes(x = Year, y = `hyd50.`))+
+  geom_ribbon(aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`), alpha = 0.2)+
+  geom_ribbon(aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`), alpha = 0.2)+
+  geom_ribbon(aes(x = Year, ymin = `all5.`, ymax = `all95.`), alpha = 0.2)+
+  theme_bw()+
+  geom_vline(xintercept = year(as.Date('2018-12-01')),linetype ="dashed",size=.6)+
+  facet_wrap(vars(Season))+
+  labs(title = "Seasonal temperature variation in Jordan Lake",
+       x = "Year",
+       y = expression(Sediment~P~release))
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Combined plot
+SedPrelma_plot <-plot_basics+
+  geom_ribbon(data = sedPres_H00_sea,aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`, fill = "hyd"), alpha = 0.8, show.legend = FALSE)+
+  geom_ribbon(data = sedPres_H00_sea,aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`, fill = "parhyd"), alpha = 0.6, show.legend = FALSE)+
+  geom_ribbon(data = sedPres_H00_sea,aes(x = Year, ymin = `all5.`, ymax = `all95.`, fill = "all"), alpha = 0.3, show.legend = FALSE)+
+  geom_line(data = sedPres_L00_sea.ori, aes(x = Year, y = `hyd50.`, color = "RCP 4.5"))+
+  geom_line(data = sedPres_H00_sea.ori,aes(x = Year, y = `hyd50.`, color = "RCP 8.5"))+
+  geom_line(data = sedPres_H00_sea[which(sedPres_H00_sea$Year%in%seq(1983,2018)),],aes(x = Year, y = `hyd50.`, color = "hist"), show.legend = FALSE)+
+  geom_vline(xintercept = 2018,linetype =3)+
+  facet_wrap(vars(Season))+
+  labs(x = "Year",
+       y = expression("IPL flux ("*g/m^2/mo*")"))+
+  scale_colour_manual(NULL,
+                      values=c(`RCP 4.5` = "blue", `RCP 8.5` = "red", `hist` = "black"),
+                      labels=c("RCP 4.5", "RCP 8.5", ""),
+                      guide = guide_legend(override.aes = list(
+                        color = c("blue", "red", NA),
+                        linetype = c(1, 1,NA),
+                        shape = c(NA, NA, NA)))) +
+  scale_y_continuous(limits = c(0,1.5), breaks = c(0,0.25,0.5,0.75,1,1.25), expand = c(0,0))+
+  scale_x_continuous(breaks = c( 1992, 2018, 2050, 2090), expand = c(0,0))+
+  scale_fill_manual(values = c("hyd" = "cornsilk4",
+                               "parhyd" = "cornsilk3",
+                                "all" = "cornsilk3"))+
+  theme(legend.position = c(0.3, 0.85),
+        panel.spacing.x = unit(1, "cm"),
+        legend.text = element_text(size = 10),
+        plot.margin = unit(c(1,1.5,1,1), "cm"),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10,color="black"),
+        axis.ticks = element_line(color = "black"))
+
+SedPrelma_plot
+
+# plot
+# png(file="OutputFiles/JLPMv016_SedPrelFutProj.png",width = 6, height = 4, units = 'in', res = 1200)
+# SedPrelma_plot
+# dev.off()
+```
+
+```{r}
+SedPrelma_plot_GA <-plot_basics+
+  geom_ribbon(data = sedPres_H00_sea[which(sedPres_H00_sea$Season=="Summer"),] ,aes(x = Year, ymin = `hyd5.`, ymax = `hyd95.`, fill = "hyd"), alpha = 0.8, show.legend = FALSE)+
+  
+
+  geom_ribbon(data = sedPres_H00_sea[which(sedPres_H00_sea$Season=="Summer"),],aes(x = Year, ymin = `parhyd5.`, ymax = `parhyd95.`, fill = "parhyd"), alpha = 0.6, show.legend = FALSE)+
+  
+  geom_ribbon(data = sedPres_H00_sea[which(sedPres_H00_sea$Season=="Summer"),],aes(x = Year, ymin = `all5.`, ymax = `all95.`, fill = "all"), alpha = 0.3, show.legend = FALSE)+
+  
+  geom_line(data = sedPres_L00_sea.ori[which(sedPres_H00_sea$Season=="Summer"),], aes(x = Year, y = `hyd50.`, color = "RCP 4.5"))+
+  
+  geom_line(data = sedPres_H00_sea.ori[which(sedPres_H00_sea$Season=="Summer"),],aes(x = Year, y = `hyd50.`, color = "RCP 8.5"))+
+  
+  geom_line(data = sedPres_H00_sea[which(sedPres_H00_sea$Year%in%seq(1983,2018) & sedPres_H00_sea$Season=="Summer"),],aes(x = Year, y = `hyd50.`, color = "hist"), show.legend = FALSE)+
+  
+  
+  geom_vline(xintercept = 2018,linetype =3)+
+  facet_wrap(vars(Season))+
+  labs(x = "Year",
+       y = expression("IPL flux ("*g/m^2/mo*")"))+
+  scale_colour_manual(NULL,
+                      values=c(`RCP 4.5` = "blue", `RCP 8.5` = "red", `hist` = "black"),
+                      labels=c("RCP 4.5", "RCP 8.5", ""),
+                      guide = guide_legend(override.aes = list(
+                        color = c("blue", "red", NA),
+                        linetype = c(1, 1,NA),
+                        shape = c(NA, NA, NA)))) +
+  scale_y_continuous(limits = c(0,1.5), breaks = c(0,0.25,0.5,0.75,1,1.25), expand = c(0,0))+
+  scale_x_continuous(breaks = c( 1992, 2018, 2050, 2090), expand = c(0,0))+
+  scale_fill_manual(values = c("hyd" = "cornsilk4",
+                               "parhyd" = "cornsilk3",
+                                "all" = "cornsilk3"))+
+  theme(#legend.position = c(0.5, 0.85),
+    legend.position = "bottom",
+        panel.spacing.x = unit(1, "cm"),
+        legend.text = element_text(size = 10),
+        plot.margin = unit(c(1,1.5,1,1), "cm"),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10,color="black"),
+        axis.ticks = element_line(color = "black"),
+        panel.background = element_rect(fill = "transparent"),
+        plot.background = element_rect(fill = "transparent", color = NA),
+        legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent", color = NA),
+        legend.key = element_rect(fill = "transparent", colour = NA))
+
+SedPrelma_plot_GA
+
+# plot
+png(file="OutputFiles/JLPMv016_SedPrelFutProj_GA.png",width = 4, height = 3, units = 'in', res = 1200, bg = "transparent")
+SedPrelma_plot_GA
+dev.off()
+```
+```
+
+
+# Comparison of two climate scenarios
+```{r}
+# Water P concentrations
+plot_basics+
+  geom_line(data = P1concL00.df.ann, aes(x = Year, y = `hyd50.`, color = "Median RCP4.5 TP"))+
+  geom_line(data = P1concH00.df.ann, aes(x = Year, y = `hyd50.`, color = "Median RCP8.5 TP"))+
+  theme(legend.position = "bottom")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))+
+  scale_color_manual(values = c(`Median RCP4.5 TP` = "blue",
+                                `Median RCP8.5 TP` = "red"))
+```
+
+The sediment P for RCP 4.5 and 8.5 do not overlap which is not correct. Needs to fix this.
+```{r}
+# Sediment P concentrations
+plot_basics+
+  geom_line(data = SconcL00.df.ann, aes(x = Year, y = `hyd50.`, color = "Median RCP4.5 TP"))+
+  geom_line(data = SconcH00.df.ann, aes(x = Year, y = `hyd50.`, color = "Median RCP8.5 TP"))+
+  theme(legend.position = "bottom")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))+
+  scale_color_manual(values = c(`Median RCP4.5 TP` = "blue",
+                                `Median RCP8.5 TP` = "red"))
+```
+
+# Percentage reduction
+Let us now estimate the change in TP in water and sediments between 2019 and 2090.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# RCP 4.5
+P1concL00.df.ann.R <- P1concL00.df.ann[which(P1concL00.df.ann$Year %in% c(2019, 2090)),]
+SconcL00.df.ann.R <- SconcL00.df.ann[which(SconcL00.df.ann$Year %in% c(2019, 2090)),]
+
+# Percentage reduction
+## water column P
+(P1concL00.df.ann.R[1,"hyd50."] - P1concL00.df.ann.R[2,"hyd50."])/P1concL00.df.ann.R[1,"hyd50."]*100
+
+## Sediment P
+(SconcL00.df.ann.R[1, "hyd50."] - SconcL00.df.ann.R[2, "hyd50."])/SconcL00.df.ann.R[1,"hyd50."]*100
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# RCP 8.5
+P1concH00.df.ann.R <- P1concH00.df.ann[which(P1concH00.df.ann$Year %in% c(2019, 2090)),]
+SconcH00.df.ann.R <- SconcH00.df.ann[which(SconcH00.df.ann$Year %in% c(2019, 2090)),]
+
+# Percentage reduction
+## water column P
+(P1concH00.df.ann.R[1,"hyd50."] - P1concH00.df.ann.R[2,"hyd50."])/P1concH00.df.ann.R[1,"hyd50."]*100
+
+## Sediment P
+(SconcH00.df.ann.R[1, "hyd50."] - SconcH00.df.ann.R[2, "hyd50."])/SconcH00.df.ann.R[1,"hyd50."]*100
+```
+### Sediment P release change
+```{r}
+# RCP 4.5
+# Summer
+sedPres_L00_summ <- (sedPres_L00_sea[which(sedPres_L00_sea$Season == "Summer"),c("Year", "Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_L00_summ19_90 <- sedPres_L00_summ[which(sedPres_L00_summ$Year %in% seq(2018, 2019,2090)),]
+
+sedPres_L00_summ.pertred <- sedPres_L00_summ[which(sedPres_L00_summ$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_L00_summ.pertred <- data.frame(Season = "Summer", sedPres_L00_summ.pertred)
+colnames(sedPres_L00_summ.pertred) <- c("Season", "2018", "2019", "2090")
+
+
+# Winter
+sedPres_L00_win <- (sedPres_L00_sea[which(sedPres_L00_sea$Season == "Winter"),c("Year","Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_L00_win19_90 <- sedPres_L00_win[which(sedPres_L00_win$Year %in% seq(2018, 2019,2090)),]
+sedPres_L00_win.pertred <- sedPres_L00_win[which(sedPres_L00_win$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_L00_win.pertred <- data.frame(Season = "Winter", sedPres_L00_win.pertred)
+colnames(sedPres_L00_win.pertred) <- c("Season", "2018", "2019", "2090")
+
+sedPres_L00_sea.pertred <- rbind(sedPres_L00_summ.pertred, sedPres_L00_win.pertred)
+
+# Spring
+sedPres_L00_spr <- (sedPres_L00_sea[which(sedPres_L00_sea$Season == "Spring"),c("Year","Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_L00_spr19_90 <- sedPres_L00_spr[which(sedPres_L00_spr$Year %in% seq(2018, 2019,2090)),]
+
+sedPres_L00_spr.pertred <- sedPres_L00_spr[which(sedPres_L00_spr$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_L00_spr.pertred <- data.frame(Season = "Spring", sedPres_L00_spr.pertred)
+colnames(sedPres_L00_spr.pertred) <- c("Season", "2018", "2019", "2090")
+
+sedPres_L00_sea.pertred <- rbind(sedPres_L00_sea.pertred, sedPres_L00_spr.pertred)
+
+
+# Fall
+sedPres_L00_fall <- (sedPres_L00_sea[which(sedPres_L00_sea$Season == "Fall"),c("Year","Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_L00_fall19_90 <- sedPres_L00_fall[which(sedPres_L00_fall$Year %in% seq(2018, 2019,2090)),]
+
+sedPres_L00_fall.pertred <- sedPres_L00_fall[which(sedPres_L00_fall$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_L00_fall.pertred <- data.frame(Season = "Fall", sedPres_L00_fall.pertred)
+colnames(sedPres_L00_fall.pertred) <- c("Season", "2018", "2019", "2090")
+
+sedPres_L00_sea.pertred <- rbind(sedPres_L00_sea.pertred, sedPres_L00_fall.pertred)
+
+row.names(sedPres_L00_sea.pertred) <- NULL
+
+sedPres_L00_sea.pertred <- sedPres_L00_sea.pertred %>% mutate(pert_drop = ((`2090`-`2019`)/`2019`)*100)
+
+head(sedPres_L00_sea.pertred)
+
+```
+
+```{r}
+# RCP 8.5
+# Summer
+sedPres_H00_summ <- (sedPres_H00_sea[which(sedPres_H00_sea$Season == "Summer"),c("Year", "Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_H00_summ19_90 <- sedPres_H00_summ[which(sedPres_H00_summ$Year %in% seq(2018, 2019,2090)),]
+
+sedPres_H00_summ.pertred <- sedPres_H00_summ[which(sedPres_H00_summ$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_H00_summ.pertred <- data.frame(Season = "Summer", sedPres_H00_summ.pertred)
+colnames(sedPres_H00_summ.pertred) <- c("Season","2018", "2019", "2090")
+
+
+# Winter
+sedPres_H00_win <- (sedPres_H00_sea[which(sedPres_H00_sea$Season == "Winter"),c("Year","Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_H00_win19_90 <- sedPres_H00_win[which(sedPres_H00_win$Year %in% seq(2018, 2019,2090)),]
+sedPres_H00_win.pertred <- sedPres_H00_win[which(sedPres_H00_win$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_H00_win.pertred <- data.frame(Season = "Winter", sedPres_H00_win.pertred)
+colnames(sedPres_H00_win.pertred) <- c("Season","2018",  "2019", "2090")
+
+sedPres_H00_sea.pertred <- rbind(sedPres_H00_summ.pertred, sedPres_H00_win.pertred)
+
+# Spring
+sedPres_H00_spr <- (sedPres_H00_sea[which(sedPres_H00_sea$Season == "Spring"),c("Year","Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_H00_spr19_90 <- sedPres_H00_spr[which(sedPres_H00_spr$Year %in% seq(2018, 2019,2090)),]
+
+sedPres_H00_spr.pertred <- sedPres_H00_spr[which(sedPres_H00_spr$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_H00_spr.pertred <- data.frame(Season = "Spring", sedPres_H00_spr.pertred)
+colnames(sedPres_H00_spr.pertred) <- c("Season","2018",  "2019", "2090")
+
+sedPres_H00_sea.pertred <- rbind(sedPres_H00_sea.pertred, sedPres_H00_spr.pertred)
+
+
+# Fall
+sedPres_H00_fall <- (sedPres_H00_sea[which(sedPres_H00_sea$Season == "Fall"),c("Year","Season","hyd5.", "hyd50.", "hyd95.",
+                 "parhyd5.", "parhyd50.", "parhyd95.",
+                 "all5.", "all50.", "all95.")])
+sedPres_H00_fall19_90 <- sedPres_H00_fall[which(sedPres_H00_fall$Year %in% seq(2018, 2019,2090)),]
+
+sedPres_H00_fall.pertred <- sedPres_H00_fall[which(sedPres_H00_fall$Year %in% c(2018, 2019,2090)), "hyd50."] %>% t %>% as.data.frame()
+sedPres_H00_fall.pertred <- data.frame(Season = "Fall", sedPres_H00_fall.pertred)
+colnames(sedPres_H00_fall.pertred) <- c("Season","2018",  "2019", "2090")
+
+sedPres_H00_sea.pertred <- rbind(sedPres_H00_sea.pertred, sedPres_H00_fall.pertred)
+
+row.names(sedPres_H00_sea.pertred) <- NULL
+
+sedPres_H00_sea.pertred <- sedPres_H00_sea.pertred %>% mutate(pert_drop = ((`2090`-`2019`)/`2019`)*100)
+
+head(sedPres_H00_sea.pertred)
+
+```
+
+```{r}
+# Percentage difference between RCP 4.5 and RCP 8.5 for summer IPL
+((sedPres_H00_sea.pertred[1,"2090"]-sedPres_L00_sea.pertred[1,"2090"])/sedPres_L00_sea.pertred[1,"2090"])*100
+```
+
+
+## Decadal average
+```{r}
+# RCP 4.5
+P1concL00.df.dec.R <- P1concL00.df.ann[which(P1concL00.df.ann$Year %in% c(2019:2028, 2081:2090)),] %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(Pconc = mean(hyd50.))
+
+SconcL00.df.dec.R <- SconcL00.df.ann[which(SconcL00.df.ann$Year %in% c(2019:2028, 2081:2090)),] %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(Sconc = mean(hyd50.))
+
+
+# Percentage reduction
+## water column P
+(P1concL00.df.dec.R[1,"Pconc"] - P1concL00.df.dec.R[2,"Pconc"])/P1concL00.df.dec.R[1,"Pconc"]*100
+
+## Sediment P
+(SconcL00.df.dec.R[1, "Sconc"] - SconcL00.df.dec.R[2, "Sconc"])/SconcL00.df.dec.R[1,"Sconc"]*100
+```
+```{r}
+# RCP 8.5
+P1concH00.df.dec.R <- P1concH00.df.ann[which(P1concH00.df.ann$Year %in% c(2019:2028, 2081:2090)),] %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(Pconc = mean(hyd50.))
+
+SconcH00.df.dec.R <- SconcH00.df.ann[which(SconcH00.df.ann$Year %in% c(2019:2028, 2081:2090)),] %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(Sconc = mean(hyd50.))
+
+
+# Percentage reduction
+## water column P
+(P1concH00.df.dec.R[1,"Pconc"] - P1concH00.df.dec.R[2,"Pconc"])/P1concH00.df.dec.R[1,"Pconc"]*100
+
+## Sediment P
+(SconcH00.df.dec.R[1, "Sconc"] - SconcH00.df.dec.R[2, "Sconc"])/SconcH00.df.dec.R[1,"Sconc"]*100
+```
+```{r}
+# Summer IPL
+## RCP 4.5
+sedPres_L00_summ.dec <- sedPres_L00_summ[which(sedPres_L00_summ$Year %in% c(2019:2028,2081:2090)), c("Year","Season","hyd50.")] %>% as.data.frame() %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(IPLconc = mean(hyd50.))
+
+## RCP 8.5
+sedPres_H00_summ.dec <- sedPres_H00_summ[which(sedPres_H00_summ$Year %in% c(2019:2028,2081:2090)), c("Year","Season","hyd50.")] %>% as.data.frame() %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(IPLconc = mean(hyd50.))
+
+# Percentage change
+((sedPres_H00_summ.dec[2,"IPLconc"] - sedPres_L00_summ.dec[2,"IPLconc"])/sedPres_L00_summ.dec[2,"IPLconc"])*100
+```
+
+
+# Variance estimation
+```{r}
+# Water column TP
+P1concH00.df.ann.Var <- P1concH00.df.ann[which(P1concH00.df.ann$Year>=2019),]
+
+## Mean variance in hydrometerological uncertainties
+Pw_hyd.var <- mean(P1concH00.df.ann.Var$hyd_var) # 123.93
+
+## Mean variance in parameter uncertainties
+Pw_parhyd.var <- mean(P1concH00.df.ann.Var$parhyd_var)- mean(P1concH00.df.ann.Var$hyd_var) # 4.57
+
+## Mean varaince in all uncertainties
+Pw_all.var <- mean(P1concH00.df.ann.Var$all_var) - mean(P1concH00.df.ann.Var$parhyd_var) # 88.83
+
+Pw_sum.var <- Pw_hyd.var +Pw_parhyd.var+ Pw_all.var
+
+P_var <- data.frame(Uncertainty = c("hydrometeorological", "parameter", "random"), Water = c(Pw_hyd.var, Pw_parhyd.var, Pw_all.var))
+
+## Percentage estimation
+P_var <- P_var %>% mutate(Wat_pert_share = ((Water/Pw_sum.var)*100))
+P_var
+
+# Sediment TP
+SconcH00.df.ann.var <- SconcH00.df.ann[which(SconcH00.df.ann$Year>=2019),]
+
+## Mean variance in hydrometerological uncertainties
+Ps_hyd.var <- mean(SconcH00.df.ann.var$hyd_var) # 0.79
+
+## Mean variance in parameter uncertainties
+Ps_parhyd.var <- mean(SconcH00.df.ann.var$parhyd_var)- mean(SconcH00.df.ann.var$hyd_var) # 136.11
+
+## Mean varaince in all uncertainties
+Ps_all.var <- mean(SconcH00.df.ann.var$all_var) - mean(SconcH00.df.ann.var$parhyd_var) # 62.05
+
+Ps_sum.var <- Ps_hyd.var +Ps_parhyd.var+ Ps_all.var
+
+## Percentage estimation
+P_var <- P_var %>% mutate(Sediment = c(Ps_hyd.var, Ps_parhyd.var, Ps_all.var),
+                          Sed_part_share = ((Sediment/Ps_sum.var)*100))
+P_var
+```
+
+
+
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+End_timer7 <- Sys.time()
+
+# Total time taken to run the entire notebook
+Tot_time7 <- End_timer7 - Start_timer7
+Tot_time7
+```

@@ -1,0 +1,910 @@
+---
+title: "Jordan Lake Reservoir Model"
+subtitle: "Part10: Future trends (with historical temperature)"
+author: "Smitom Borah"
+date: "01/05/2023"
+output: 
+  html_notebook:
+    toc : yes
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+
+---
+
+<style type="text/css">
+
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+  text-align: center;
+}
+
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+  text-align: center;
+}
+
+h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Red;
+  text-align: center;
+}
+
+</style>
+
+Time required to run the entire notebook: ~ ???
+
+
+# Motivation
+In this notebook, we develop future trends of TP in water and sediment columns under the scenario if historical temperatures persisted in the future. The final visualization are done in subsequent parts.
+
+# Edit log
+*No new edits since its creation.*
+
+
+# Loading packages
+Following packages were used in this notebook.
+
+```{r Packages, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# Clearing the working environment----
+cat("\014"); rm(list=ls(all=TRUE)); graphics.off()  
+
+# Start timer
+Start_timer10 <- Sys.time()
+
+# Loading the packages----
+if (!require("pacman")) install.packages("pacman") ;
+pacman::p_load(shinyjs,threejs,xlsx,minpack.lm,MuMIn,lme4,penalized,zoo,RColorBrewer,gridExtra,rowr,stringi,optimx,purrrlyr,Hmisc,leaps,caret,magrittr,plotly,remotes,RcppRoll,suncalc,adaptMCMC,TTR, truncnorm, readxl,lubridate, data.table,deSolve,zoo,tidyverse) 
+library(lubridate)
+
+library(caret)
+library(randomForest)
+
+```
+# Functions
+```{r Functions, echo=TRUE, message=FALSE, warning=FALSE}
+# Functions----
+## Function to determine the season of the year
+Season <- function(Date){
+  #--------
+  # Argument detail:
+  # Date : date vector
+  #--------
+  
+  # Creating a month vector
+  Mo <- month(Date)
+  season <- rep(NA, length(Mo))
+  for (i in 1:length(Mo)) {
+    if (Mo[i] %in% c(1,2,3)){
+      season[i] <- "Winter"
+    } else if (Mo[i] %in% c(4,5,6)){
+      season[i] <- "Spring"
+    } else if (Mo[i] %in% c(7,8,9)){
+      season[i] <- "Summer"
+    } else {
+      season[i] <- "Fall"
+    }
+    
+  }
+  return(season)
+}
+### test run
+# Season(as.Date("2018-10-12", format = "%Y-%m-%d"))
+
+## function to calculate 35days moving average of a column
+MA35func <- function(x){
+  #--------
+  # Argument detail:
+  # x : column whose 35d moving average needs to be calculated
+  #--------
+  
+  return(rollmean(x, 35, fill = NA, align = "right"))
+  
+}
+
+## function to calculate 14days moving average of a column
+MA14func <- function(x){
+  #--------
+  # Argument detail:
+  # x : column whose 14d moving average needs to be calculated
+  #--------
+  
+  return(rollmean(x, 14, fill = NA, align = "right"))
+  
+}
+```
+
+
+# General Plotting specification
+To maintain the consistency in the plots developed in this notebook, we create a ggplot object to store the basic specification for each plot.
+
+```{r Gen Plot specifics, echo=TRUE, message=FALSE, warning=FALSE}
+# General plot specification
+plot_basics <- ggplot()+
+  theme_bw()+
+  theme(legend.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"))
+```
+
+# Calibration and forecast period
+We calibrate the model using the data from Jan, 1983 to Dec, 2018 and predict for the period from 1983 to 2090.
+
+```{r CalibrationPeriod, echo=TRUE, message=FALSE, warning=FALSE}
+# Daily period of record and prediction----
+## Daily period of record
+date.cali.daily <- floor_date(seq(ymd('1983-01-01'),
+                                  ymd('2018-12-31'), 
+                                  by = 'day'), 
+                        unit = "day")
+
+## Period of prediction
+date.pred.daily <- floor_date(seq(ymd('2019-01-01'),
+                                  ymd('2090-12-31'), 
+                                  by = 'day'), 
+                        unit = "day")
+
+
+# Monthly period of record and prediction----
+## Period of record
+date_cali <- floor_date(seq(ymd('1983-01-01'),ymd('2018-12-01'), by = 'month'), unit = "month")
+
+## Period of prediction
+date_scen <- floor_date(seq(ymd('2019-01-01'),ymd('2090-12-01'), by = 'month'), unit = "month")
+
+```
+
+
+# Future Trends with historical temperature
+## Inputs
+In this section, we specify the inputs required to run the model
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Percentage reduction in external P loading
+exPL00 <- -0
+
+# Number of posterior parameter samples
+N <- 1000
+
+# Loading the First-order workspace 
+load("RWorkSpaces/JLPMv016p001_1.RData")
+
+# Inputs 
+Popt_par <- opt_prm
+PinpDF <- RoutMOdin[,!colnames(RoutMOdin) %in% c("...1")]
+PinpDF <- RoutMOdin
+Pinp <- RoutMOdin %>% creaInp(.,tlim=nrow(.))
+Pico <- Const_lis 
+Pico$timestep <- 1:length(Pinp$A1t)
+Pico$vs_scal <- vs_scal
+Pico$par_scal <- par_scal
+
+# Changing the Date of PinpDF
+PinpDF$Date <- as.Date(paste0(PinpDF$mo,"/1/",PinpDF$year), format = "%m/%d/%Y")
+  
+# Adding the hypolimnion middepths
+# loading the monthly hypolimnetic depths data
+hypo.midDepth.raw <- read_excel("DataFiles/HypolimnionCalcs.xlsx", 
+                                sheet = "Sheet1", range = "A2:Y434")%>%
+  rename(.,
+         H1m = `H1 m...22`,
+         H2m = `H2 m...23`,
+         H3m = `H3 m...24`,
+         H4m = `H4 m...25`)
+  
+# Only segments 2-4
+hypo.midDepth <- hypo.midDepth.raw[,c("start_d", "H2m", "H3m", "H4m")]
+
+# renaming a column
+colnames(hypo.midDepth)[1] <- "Date"
+hypo.midDepth$Date <- as.Date(hypo.midDepth$Date)
+
+# Adding the hypolimnion mid-depths to PinpDF
+PinpDF <- merge(PinpDF,hypo.midDepth,by = "Date", all.x = T )
+
+
+# Setting seed
+set.seed(500)
+# sampling set of posterior samples 
+postPsmpl <- RAM$samples[sample(seq((nrow(RAM$samples)-25000),nrow(RAM$samples)), N, replace = F),]
+
+
+# Separating the observations 
+Pobs <- obs %>% transmute(cale_date=myd(paste0(as.character(ym),"-1")), 
+                          TPugL = obs,variable)
+
+# Check for segments 
+all_seg <- Pobs %>% pull(variable) %>% unique # should be 4 : "C1","C2","C3" and "C4"
+
+# Loading the functions file 
+source("Pmodels/JLPMfunv16p005.R")
+
+# Projection years
+yrs_prj <- date_scen %>% year %>% unique %>% length()
+
+```
+
+# Average Mass in the historical years
+Let us calculate the average mass in each segment in the historical years. This information is useful for future year P concentration predictions.
+```{r}
+# average Mass in each segments
+## Segment 1
+meanM1 <- mean(MassFlows[which(MassFlows$year %in% c(1999,2018)),]$M1)
+
+## Segment 2
+meanM2 <- mean(MassFlows[which(MassFlows$year %in% c(1999,2018)),]$M2)
+
+## Segment 3
+meanM3 <- mean(MassFlows[which(MassFlows$year %in% c(1999,2018)),]$M3)
+
+## Segment 4
+meanM4 <- mean(MassFlows[which(MassFlows$year %in% c(1999,2018)),]$M4)
+
+# Quick view
+AvgMoP.df<- data.frame(Segment = c(1,2,3,4), Avg.P.Mass_kg_mo = c(meanM1, meanM2, meanM3, meanM4))
+AvgMoP.df
+```
+
+# Historical temperature projections
+```{r}
+# Plotting the bottom water temperature between 1999 and 2018
+hist_temp <- RoutMOdin[,c("Date","Temperature")]
+
+plot_basics+
+  geom_point(data = hist_temp, aes(x = seq(1,432), y = Temperature))+
+  geom_line(data = hist_temp, aes(x = seq(1,432), y = Temperature))+
+  labs(x = "Month number in the study year",
+       y = "Temperature")
+
+```
+
+
+## Generating future projections
+```{r future projections, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# setting a timer
+start_time <- Sys.time()
+
+# A vector of historical years
+set.seed(500)
+Hyr <- sample(rep(seq(1999,2018), times =3 ), 60, replace = F)
+
+# Number of historical years
+nhist <- length(Hyr)
+
+HistYears.df <- data.frame(y2019 = Hyr)
+
+for (y in 1:(yrs_prj-1)) {
+  Mod <- paste0("y",y+2019)
+  Hyr <- c(Hyr[2:nhist],Hyr[1])
+  HistYears.df <- cbind(HistYears.df,Hyr)
+  colnames(HistYears.df)[ncol(HistYears.df)] <- Mod
+}
+
+HistYears.df <- HistYears.df%>%t%>% as.data.frame()
+
+set.seed(456)
+HistYears.df <- HistYears.df[sample(1:nrow(HistYears.df),nrow(HistYears.df),replace = FALSE ),]
+
+# Turing the columns into a list of input future series
+HistYears <- list()
+for(i in 1:ncol(HistYears.df)) {             # Using for-loop to add columns to list
+  HistYears[[i]] <- HistYears.df[[i]]
+}
+
+# Number of parameter sets to be considered for each year
+npar <- 1000 # TODO change to 1000
+
+# Sampling say 100 parameter sets from 1000 without replacement
+set.seed(456)
+parset <- sample(1:nrow(postPsmpl), npar, replace= FALSE)
+
+# Creating a list to store all the dataframes
+PparhydL00 <- list()
+PallL00 <- list()
+
+# number of times random error are added
+rnum <- 1
+
+
+for (i in 1:nhist){
+  # i <- 1 #TODO remove this line in the final cleaned version
+
+  ## Scenario selection
+  EP_red <- exPL00
+  
+  ## Future years with one year data from the historical years 
+  PinpFut <- data.frame()
+  for (ii in 1:yrs_prj){
+    tdf <- PinpDF[which(PinpDF$year %in% HistYears[[i]][ii]),]
+    tdf$Date <- as.Date(tdf$Date)
+    tdf[1, !(colnames(tdf) %in% c("Date", "yrmo"))] <- as.numeric(tdf[1, !(colnames(tdf) %in% c("Date", "yrmo"))])
+    
+    PinpFut %<>%bind_rows(.,tdf)
+  }
+  
+  # Correcting order of t
+  PinpFut$t <- seq(1,nrow(PinpFut))
+  
+  # Getting the dates right
+  PinpFut$Date <- as.Date(date_scen)
+  
+  
+  # Combining calibration and prediction datasets together
+  PinpDFall <- PinpDF %>% as_tibble() %>% bind_rows(.,PinpFut) %>% 
+    rowid_to_column(., "ro")
+  
+  # Accounting for imaginary volume addition/removal in future years
+  PinpDF <- PinpVolBal.fun(PinpDFall1 = PinpDF)
+  PinpFut <- PinpVolBal.fun(PinpDFall1 = PinpFut)
+  PinpDFall <- PinpVolBal.fun()
+  
+  # Correcting the years
+  PinpFut$year <- year(PinpFut$Date)
+  PinpDFall$year <- year(PinpDFall$Date)
+  
+  # Bottom to surface P ratio
+  ## Segment 2 bottom to surface P ratio
+  Seg2_BoSuPmo <- Seg2_BoSuP %>% mutate(year = year(as.Date(Seg2_BoSuP$Date, format = "%Y-%m-%d")),
+                                       month = month(as.Date(Seg2_BoSuP$Date, format = "%Y-%m-%d")))
+  
+  Seg2_BoSuPmo <- Seg2_BoSuPmo %>% group_by(year, month) %>%
+    summarise(Rbs2 = median(pred_BoSuP))
+  
+  BotSurPrat2 <- data.frame()
+  for (ii in 1:yrs_prj){
+    tdf <- Seg2_BoSuPmo[which(Seg2_BoSuPmo$year %in% HistYears[[i]][ii]),]
+    BotSurPrat2 %<>%bind_rows(.,tdf)
+  }
+  
+  BotSurPrat2all <- Seg2_BoSuPmo %>% as_tibble() %>% bind_rows(., BotSurPrat2) 
+  Pico$Rbs2 <- BotSurPrat2all$Rbs2
+  
+  ## Segment 3 bottom to surface P ratio
+  Seg3_BoSuPmo <- Seg3_BoSuP %>% mutate(year = year(as.Date(Seg3_BoSuP$Date, format = "%Y-%m-%d")),
+                                       month = month(as.Date(Seg3_BoSuP$Date, format = "%Y-%m-%d")))
+  
+  Seg3_BoSuPmo <- Seg3_BoSuPmo %>% group_by(year, month) %>%
+    summarise(Rbs3 = median(pred_BoSuP))
+  
+  BotSurPrat3 <- data.frame()
+  for (ii in 1:yrs_prj){
+    tdf <- Seg3_BoSuPmo[which(Seg3_BoSuPmo$year %in% HistYears[[i]][ii]),]
+    BotSurPrat3 %<>%bind_rows(.,tdf)
+  }
+  
+  BotSurPrat3all <- Seg3_BoSuPmo %>% as_tibble() %>% bind_rows(., BotSurPrat3) 
+  Pico$Rbs3 <- BotSurPrat3all$Rbs3
+
+  ## Segment 4 bottom to surface P ratio
+  Seg4_BoSuPmo <- Seg4_BoSuP %>% mutate(year = year(as.Date(Seg4_BoSuP$Date, format = "%Y-%m-%d")),
+                                       month = month(as.Date(Seg4_BoSuP$Date, format = "%Y-%m-%d")))
+  
+  Seg4_BoSuPmo <- Seg4_BoSuPmo %>% group_by(year, month) %>%
+    summarise(Rbs4 = median(pred_BoSuP))
+  
+  BotSurPrat4 <- data.frame()
+  for (ii in 1:yrs_prj){
+    tdf <- Seg4_BoSuPmo[which(Seg4_BoSuPmo$year %in% HistYears[[i]][ii]),]
+    BotSurPrat4 %<>%bind_rows(.,tdf)
+  }
+  
+  BotSurPrat4all <- Seg4_BoSuPmo %>% as_tibble() %>% bind_rows(., BotSurPrat4) 
+  Pico$Rbs4 <- BotSurPrat4all$Rbs4
+  
+  # Arranging the dataset
+  PinpCaSc <- PinpDFall %>% creaInp(.,tlim=nrow(.))
+  Pico$timestep <- 1:length(PinpCaSc$A1t)
+  
+  # temporary save
+  Pico_tmp1 <- Pico
+  Pico_tmp2 <- Pico
+  
+  # Model run for calibration part 
+  # Arranging the calibration dataset 
+  # PinpCaSc1 <- PinpDF %>% creaInp(.,tlim=nrow(.))
+  PinpCaSc1 <- PinpDFall[1:(nrow(PinpDF)+1),] %>% creaInp(.,tlim=nrow(.))
+  Pico_tmp1$timestep <- 1:length(PinpCaSc1$A1t)
+  Pico_tmp1$Rbs2 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
+  Pico_tmp1$Rbs3 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
+  Pico_tmp1$Rbs4 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
+
+    # Temporary objects to store model outputs
+  ## object to store outputs w/ parameter + hydrologic uncertainty
+  PparhydL00x <- list() 
+  PallL00x <- list()
+  
+  # Generating model outputs based on each historical year and
+  # each different parameter sets
+  for (j in 1: npar){
+    # j <- 1 
+    # Selecting a parameter set
+    parPih <- postPsmpl[parset[j],]
+    
+    # Model run
+    TempDF1 <- mod_wrap_pred_v3(inp_dat=PinpCaSc1,
+                               FixInp_lis=Pico_tmp1,
+                               CalPar=parPih) %>%
+    dplyr::select(matches("C1|C.sur"),M1, M2, M3, M4, S1,S2,S3,S4,temperature, V1, V2, V3, V4) %>%
+    `colnames<-`(substring(colnames(.),1,2)) %>%
+    add_column(.,cale_date=c(date_cali, date_scen[1])) 
+
+    # Model run for the future projections
+    PinpCaSc2 <- PinpFut %>% creaInp(.,tlim=nrow(.))
+    Pico_tmp2$timestep <- 1:length(PinpCaSc2$A1t)
+    
+    
+    Pico_tmp2$Rbs2 <- BotSurPrat2all$Rbs2[(nrow(PinpDF)+1):nrow(PinpDFall)]
+    Pico_tmp2$Rbs3 <- BotSurPrat3all$Rbs3[(nrow(PinpDF)+1):nrow(PinpDFall)]
+    Pico_tmp2$Rbs4 <- BotSurPrat4all$Rbs4[(nrow(PinpDF)+1):nrow(PinpDFall)]
+    
+    Pico_tmp2$M1init <- AvgMoP.df$Avg.P.Mass_kg_mo[1]
+    Pico_tmp2$M2init <- AvgMoP.df$Avg.P.Mass_kg_mo[2]
+    Pico_tmp2$M3init <- AvgMoP.df$Avg.P.Mass_kg_mo[3]
+    Pico_tmp2$M4init <- AvgMoP.df$Avg.P.Mass_kg_mo[4]
+    Pico_tmp2$S1init <- TempDF1$S1[nrow(TempDF1)]
+    Pico_tmp2$S2init <- TempDF1$S2[nrow(TempDF1)]
+    Pico_tmp2$S3init <- TempDF1$S3[nrow(TempDF1)]
+    Pico_tmp2$S4init <- TempDF1$S4[nrow(TempDF1)]
+    
+    parPih["S1fac"] <- 1
+    
+    TempDF2 <- mod_wrap_pred_v3(inp_dat=PinpCaSc2,
+                               FixInp_lis=Pico_tmp2,
+                               CalPar=parPih) %>%
+    dplyr::select(matches("C1|C.sur"),M1,M2,M3, M4, S1,S2,S3,S4,temperature, V1, V2, V3, V4) %>%
+    `colnames<-`(substring(colnames(.),1,2)) %>%
+      add_column(.,cale_date=c(date_scen))
+    
+    TempDF <- rbind(TempDF1[1:(nrow(TempDF1)-1),],TempDF2)
+    
+    TempDF <- TempDF %>% 
+      mutate(S1res = (parPih["Rs"]/100)*S1*(parPih["ThetaR"]^(te-20)),
+             S2res = (parPih["Rs"]/100)*S2*(parPih["ThetaR"]^(te-20)),
+             S3res = (parPih["Rs"]/100)*S3*(parPih["ThetaR"]^(te-20)),
+             S4res = (parPih["Rs"]/100)*S4*(parPih["ThetaR"]^(te-20)),
+             Sconc = (S1+S2+S3+S4)/(49.02*10^3),
+             Sres = (S1res+S2res+S3res+S4res)/(49.02*10^3))
+    
+    # Adding residual error multiple times
+    PallL00x.mul <- list()
+    for (k in 1:rnum){
+      
+      # only adds observ error to Conc
+      PpredRes <- TempDF %>% 
+        # transform
+        mutate_each(funs(sysanal.boxcox(., l1,l2)),-c(cale_date))%>%
+        # add P error
+        mutate_each(funs(.+rnorm(length(.),0,parPih["sy"])),
+                    -c(cale_date)) %>%  
+        # back transform
+        mutate_each(funs(sysanal.boxcox.inv(.,l1,l2)),-c(cale_date))
+      
+      # Storing in the list
+      PallL00x.mul[k] <- list(PpredRes)
+    }
+    
+    
+    # Storing the model outputs
+    PparhydL00x[j] <- list(TempDF)
+    PallL00x[j] <- list(PallL00x.mul)
+  }
+  
+  # Storing model outputs for each year
+  PparhydL00[i] <- list(PparhydL00x)
+  PallL00[i] <- list(PallL00x)
+  
+  # code to track progress
+  svMisc::progress((i/nhist)*100)
+  Sys.sleep(0.1)
+  if (i == nhist) message("Done!")
+}
+
+
+# Ending the timer
+end_time <- Sys.time()
+
+```
+Time taken to run the above code chunk:
+```{r time taken, echo=TRUE, message=FALSE, warning=FALSE}
+# Total tile taken
+end_time - start_time
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Temporary save [10-22-2022 09:00 AM]
+# save.image("RWorkSpaces/JLPMv016p010_1_temp.RData")
+```
+
+Now let us create a function to estimate the future projections with different uncertainties.
+
+```{r uncert func, echo=TRUE, message=FALSE, warning=FALSE}
+# function to calculate different uncertainties
+PI_func <- function(PI, Cx, nhistx = nhist, nparx = npar, rnumx = rnum){
+  # PI -> prediction interval in percent
+  # Cx -> Segment as C1, C2, C3 or C4
+  # nhistx -> number of historical years
+  # nparx -> number of parameter sets
+  # rnumx -> number of times random errors are considered
+  
+  #--------
+  # For testing the function
+  # PI = 90
+  # nhistx = 60
+  # nparx = 100
+  # Cx = "C1"
+  #--------
+  
+  # Prediction interval
+  PI_low <- (100-PI)/2 # lower limit
+  PI_high <- PI+ (100-PI)/2 # upper limit
+  
+  # Future projections with hydrologic uncertainty
+  ## blank list
+  Cxh.lst <- list()
+  
+  ## Taking the mean or median for each historical year
+  for (i in 1:nhistx){
+    tmpx.df <- data.frame(date = c(date_cali, date_scen))
+    
+    for (j in 1:nparx){
+      Mod <- paste0("Year",i+1998,"n",j)
+      tmpx.df <- cbind(tmpx.df, PparhydL00[[i]][[j]][,Cx])
+      colnames(tmpx.df)[ncol(tmpx.df)] <- Mod
+      }
+
+      Cxh.lst[[i]] <- tmpx.df %>% 
+        # mutate(central = apply(select(.,-date),1, median)) # Central value is median
+        mutate(central = apply(select(.,-date),1, mean)) # Central value is mean
+    }
+  
+  ## Pulling the central value out of the list and renaming the data frame with respective historical years
+  Cxh.df <- Cxh.lst %>% sapply(.,"[[", "central") %>% as.data.frame() %>% `colnames<-`(.,seq(1, nhistx))
+  
+  ## Adding Date to the data frame
+  Cxh.df.ann <- Cxh.df %>% mutate(date = c(date_cali, date_scen),
+                              Year = year(date)) %>%
+    group_by(Year) %>% summarise_at(.vars = vars(-("date")), .funs = mean)
+  
+  ## Storing the annual value
+  Cxh.df.ann_hyd <- Cxh.df.ann
+  
+  
+  ## Estimating the quantilies
+  Cxh.df.t <- apply(Cxh.df, 1 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100))) %>%
+    t %>% as.data.frame() %>% 
+    mutate(date = c(date_cali, date_scen))%>% 
+    rename_at(vars(-date),function(x) paste0("hyd",x))
+  
+  ## mean and variance 
+  Cxh.df.t <- Cxh.df.t %>% mutate(hyd_mean = apply(Cxh.df, 1, mean),
+                                  hyd_var = apply(Cxh.df, 1, var))
+  
+  ## Quantiles for annual For annual data
+  Cxh.df.t.ann <- apply(select(Cxh.df.ann, -("Year")), 1 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100))) %>%
+    t %>% as.data.frame() %>% 
+    mutate(Year = unique(year(c(date_cali, date_scen))))%>% 
+    rename_at(vars(-Year),function(x) paste0("hyd",x))
+  
+  ## mean and variance for annual data
+  Cxh.df.t.ann <- Cxh.df.t.ann %>% mutate(hyd_mean = apply(Cxh.df.ann[,2:ncol(Cxh.df.ann)], 1, mean),
+                                  hyd_var = apply(Cxh.df.ann[,2:ncol(Cxh.df.ann)], 1, var))
+  
+  ## Creating a data frame to store the final data
+  conc.df.t <- Cxh.df.t[,c(4,1:3,5:6)]
+  conc.df.t.ann <- Cxh.df.t.ann[,c(4,1:3, 5:6)]
+  
+  # Future projections with parameter and hydrological uncertainties
+  ## Creating a data frame to extract the concentration for the given segment
+  Cx.df <- data.frame(date = c(date_cali, date_scen))
+  for (i in 1:nhistx){
+    for (j in 1:nparx){
+      Mod <- paste0("Year",i+1998,"n",j)
+      Cx.df <- cbind(Cx.df, PparhydL00[[i]][[j]][,Cx])
+      colnames(Cx.df)[ncol(Cx.df)] <- Mod
+      }
+  }
+  
+  ## Annual average
+  Cx.df.ann <- Cx.df %>% mutate(date = c(date_cali, date_scen),
+                              Year = year(date)) %>%
+    group_by(Year) %>% summarise_at(.vars = vars(-("date")), .funs = mean)
+  
+  ## Storing the annual value
+  Cxh.df.ann_parhyd <- Cx.df.ann
+  
+  ## Estimating the quantiles 
+  Cx.df.t <- Cx.df[,2:ncol(Cx.df)] %>% t
+  Cx.df.t <- apply(Cx.df.t, 2 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100)))%>% 
+    t %>% as.data.frame() %>% 
+    mutate(date = c(date_cali, date_scen))%>% 
+    rename_at(vars(-date),function(x) paste0("parhyd",x))
+  
+  ## mean and variance 
+  Cx.df.t <- Cx.df.t %>% mutate(parhyd_mean = apply(Cx.df[,2:ncol(Cx.df)], 1, mean),
+                                  parhyd_var = apply(Cx.df[,2:ncol(Cx.df)], 1, var))
+  
+  ## Quantiles for annual For annual data
+  Cx.df.t.ann <- apply(select(Cx.df.ann, -("Year")), 1 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100))) %>%
+    t %>% as.data.frame() %>% 
+    mutate(Year = unique(year(c(date_cali, date_scen))))%>% 
+    rename_at(vars(-Year),function(x) paste0("parhyd",x))
+
+  ## Mean and variance for annual data
+    Cx.df.t.ann <- Cx.df.t.ann %>% mutate(parhyd_mean = apply(Cx.df.ann[,2:ncol(Cx.df.ann)], 1, mean),
+                                  parhyd_var = apply(Cx.df.ann[,2:ncol(Cx.df.ann)], 1, var))
+  
+  ## Storing the final data
+  conc.df.t <- cbind(conc.df.t, Cx.df.t[,c(1:3, 5:6)])
+  conc.df.t.ann <- cbind(conc.df.t.ann, Cx.df.t.ann[,c(1:3, 5:6)])
+  
+  # Future projections with all uncertainties
+  ## Creating a data frame to extract the concentration for the given segment
+  Px.df <- data.frame(date = c(date_cali, date_scen))
+  for (i in 1:nhist){
+    for (j in 1:npar){
+      for (k in 1:rnum){
+        Mod <- paste0("Year",i+1998,"n",j,"k",k)
+        Px.df <- cbind(Px.df, PallL00[[i]][[j]][[k]][,Cx])
+        colnames(Px.df)[ncol(Px.df)] <- Mod
+      }
+    }
+  }
+  
+  ## Annual average
+  Px.df.ann <- Px.df %>% mutate(date = c(date_cali, date_scen),
+                              Year = year(date)) %>%
+    group_by(Year) %>% summarise_at(.vars = vars(-("date")), .funs = mean)
+  
+  ## Storing the annual value
+  Pxh.df.ann_all <- Px.df.ann
+  
+  ## Estimating the quantiles
+  Px.df.t <- Px.df[,2:ncol(Px.df)] %>% t
+  Px.df.t <- apply(Px.df.t, 2 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100)))%>% 
+    t %>% as.data.frame() %>% 
+    mutate(date = c(date_cali, date_scen))%>% 
+    rename_at(vars(-date),function(x) paste0("all",x))
+  
+  ## mean and variance 
+  Px.df.t <- Px.df.t %>% mutate(all_mean = apply(Px.df[,2:ncol(Px.df)], 1, mean),
+                                  all_var = apply(Px.df[,2:ncol(Px.df)], 1, var))
+  
+  ## Quantiles for annual For annual data
+  Px.df.t.ann <- apply(select(Px.df.ann, -("Year")), 1 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100))) %>%
+    t %>% as.data.frame() %>% 
+    mutate(Year = unique(year(c(date_cali, date_scen))))%>% 
+    rename_at(vars(-Year),function(x) paste0("all",x))
+  
+  ## mean and variance 
+  Px.df.t.ann <- Px.df.t.ann %>% mutate(all_mean = apply(Px.df.ann[,2:ncol(Px.df.ann)], 1, mean),
+                                  all_var = apply(Px.df.ann[,2:ncol(Px.df.ann)], 1, var))
+  
+  ## Storing the final data
+  conc.df.t <- cbind(conc.df.t, Px.df.t[,c(1:3, 5:6)])
+  conc.df.t.ann <- cbind(conc.df.t.ann, Px.df.t.ann[,c(1:3, 5:6)])
+  
+  return(list(conc.df.t, # 1
+              conc.df.t.ann, # 2
+              Cxh.df.ann_hyd, # 3
+              Cxh.df.ann_parhyd, # 4  
+              Pxh.df.ann_all # 5
+              ))
+}
+
+
+# test run
+# PI_func(90, "C1")[[7]] # working
+```
+
+
+## Segment 1 TP Concentration
+Let us find the future projections for Segment 1 TP with 90% prediction interval.
+```{r Segment 1 90% PI, echo=TRUE, message=FALSE, warning=FALSE}
+
+# TP concentrations
+P1L00.df <- PI_func(90, "C1")
+P1concL00.df <- P1L00.df[[1]]
+P1concL00.df.ann <- P1L00.df[[2]]
+
+```
+
+
+
+```{r 95%PI plot, echo=TRUE, message=FALSE, warning=FALSE}
+# Plotting the results
+plot_basics+
+  geom_line(data = P1concL00.df, aes(x = date, y = `hyd50%`, color = "Median TP"))+
+  geom_ribbon(data = P1concL00.df, aes(x = date, ymin = `hyd5%`, ymax = `hyd95%`), fill = "black", alpha = 0.3)+
+  geom_ribbon(data = P1concL00.df, aes(x = date, ymin = `parhyd5%`, ymax = `parhyd95%`), fill = "green", alpha = 0.3)+ 
+  geom_ribbon(data = P1concL00.df, aes(x = date, ymin = `all5%`, ymax = `all95%`), fill = "red", alpha = 0.3)+
+  theme(legend.position = "none")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))
+
+```
+
+```{r annual ma TP plot, echo=TRUE, message=FALSE, warning=FALSE}
+# Plotting the results
+## Smoothening the lines
+plot_basics+
+  geom_ribbon(data = P1concL00.df.ann, aes(x = Year, ymin = `hyd5%`, ymax = `hyd95%`), fill = "black", alpha = 0.4)+
+  geom_ribbon(data = P1concL00.df.ann, aes(x = Year, ymin = `parhyd5%`, ymax = `parhyd95%`), fill = "black", alpha = 0.3)+
+  geom_ribbon(data = P1concL00.df.ann, aes(x = Year, ymin = `all5%`, ymax = `all95%`), fill = "black", alpha = 0.2)+
+  geom_line(data = P1concL00.df.ann, aes(x = Year, y = `hyd50%`, color = "Median TP"))+
+  theme(legend.position = "none")+
+  labs(x = "Year",
+       y = expression(Total~phosphorus~"("*mu*g/L*")"))+
+  scale_color_manual(values = c(`Median TP` = "red"))
+```
+
+
+## Sediment P Concentration
+Let us find the future projections for sediment TP across Jordan Lake with 90% prediction interval.
+```{r Sediment PI, echo=TRUE, message=FALSE, warning=FALSE}
+
+# Sediment P concentrations
+SL00.df <- PI_func(90, "Sconc")
+SconcL00.df <- SL00.df[[1]]
+SconcL00.df.ann <- SL00.df[[2]]
+
+
+```
+
+
+```{r PI plot Sediment, echo=TRUE, message=FALSE, warning=FALSE}
+# Plotting the results
+plot_basics+
+  geom_line(data = SconcL00.df, aes(x = date, y = `hyd50%`, color = "Median TP"))+
+  geom_line(data = SconcL00.df, aes(x = date, y = `hyd_mean`, color = "Mean TP"))+
+  geom_ribbon(data = SconcL00.df, aes(x = date, ymin = `all5%`, ymax = `all95%`, fill = "all"), alpha = 0.3)+
+  geom_ribbon(data = SconcL00.df, aes(x = date, ymin = `parhyd5%`, ymax = `parhyd95%`, fill = "parhyd"), alpha = 0.3)+ 
+  # geom_ribbon(data = Sconc.df[which(Sconc.df$date %in% date_scen),], aes(x = date, ymin = `hyd16%`, ymax = `hyd84%`, fill = "hyd"), alpha = 0.3)+
+  geom_ribbon(data = SconcL00.df, aes(x = date, ymin = `hyd5%`, ymax = `hyd95%`, fill = "hyd"), alpha = 0.3)+
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 10))+
+  labs(x = "Year",
+       y = expression(atop(TP~"in"~sediments,"("*g/m^2*")")))+
+  scale_fill_manual("",values = c(`hyd` = "blue",
+                               `parhyd` = "green",
+                               `all` = "red"),
+                    labels = c("Hydro UC", "Parameter+Hydro UC", "All UC"),
+                       guide = guide_legend(override.aes = 
+                                              list(alpha = c(0.1,0.1,0.1))))+
+  scale_color_manual("", values = c(`Median TP` = "red",
+                                    `Mean TP` = "black"),
+                     labels = c(""),
+                     guide = "none")+
+  ylim(0,170)+
+  geom_vline(xintercept = as.Date("2018-12-31", format = "%Y-%m-%d"), lty = 2)
+
+```
+
+```{r annual ma sediment P plot, echo=TRUE, message=FALSE, warning=FALSE}
+# Plotting the results
+plot_basics+
+  geom_ribbon(data = SconcL00.df.ann, aes(x = Year, ymin = `hyd5%`, ymax = `hyd95%`), fill = "black", alpha = 0.4)+
+  geom_ribbon(data = SconcL00.df.ann, aes(x = Year, ymin = `parhyd5%`, ymax = `parhyd95%`), fill = "black", alpha = 0.3)+
+  geom_ribbon(data = SconcL00.df.ann, aes(x = Year, ymin = `all5%`, ymax = `all95%`), fill = "black", alpha = 0.2)+
+  geom_line(data = SconcL00.df.ann, aes(x = Year, y = `parhyd50%`, color = "Median TP"))+
+  geom_line(data = SconcL00.df.ann, aes(x = Year, y = `hyd_mean`, color = "Mean TP"))+
+  theme(legend.position = "none")+
+  labs(x = "Year",
+       y = expression(atop(TP~"in"~sediments,"("*g/m^2*")")))+
+  ylim(0,150)+
+  scale_color_manual(values = c(`Median TP` = "red",
+                                `Mean TP` = "blue"))
+```
+
+# Percentage reduction
+Let us now estimate the change in TP in water and sediments between 2019 and 2090.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+P1concL00.df.ann.R <- P1concL00.df.ann[which(P1concL00.df.ann$Year %in% c(2019, 2090)),]
+SconcL00.df.ann.R <- SconcL00.df.ann[which(SconcL00.df.ann$Year %in% c(2019, 2090)),]
+
+# Percentage reduction
+## water column P
+(P1concL00.df.ann.R[1,"hyd50%"] - P1concL00.df.ann.R[2,"hyd50%"])/P1concL00.df.ann.R[1,"hyd50%"]*100
+
+## Sediment P
+(SconcL00.df.ann.R[1, "hyd50%"] - SconcL00.df.ann.R[2, "hyd50%"])/SconcL00.df.ann.R[1,"hyd50%"]*100
+```
+
+## Decadal average
+```{r}
+# historical
+P1concL00.df.dec.R <- P1concL00.df.ann[which(P1concL00.df.ann$Year %in% c(2019:2028, 2081:2090)),] %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(Pconc = mean(`hyd50%`))
+
+SconcL00.df.dec.R <- SconcL00.df.ann[which(SconcL00.df.ann$Year %in% c(2019:2028, 2081:2090)),] %>% mutate(decade = rep(c(1,2), each = 10)) %>% group_by(decade) %>%
+  summarise(Sconc = mean(`hyd50%`))
+
+
+# Percentage reduction
+## water column P
+(P1concL00.df.dec.R[1,"Pconc"] - P1concL00.df.dec.R[2,"Pconc"])/P1concL00.df.dec.R[1,"Pconc"]*100
+
+## Sediment P
+(SconcL00.df.dec.R[1, "Sconc"] - SconcL00.df.dec.R[2, "Sconc"])/SconcL00.df.dec.R[1,"Sconc"]*100
+```
+
+## Sediment P release
+Let us find the future projections for sediment P release across Jordan Lake with 68% prediction interval.
+```{r Sediment P release 90% PI, echo=TRUE, message=FALSE, warning=FALSE}
+
+# Sediment P release
+SPresL00.df <- PI_func(90, "Sres")
+SresL00.df <- SPresL00.df[[1]]
+
+## Adding seasons
+SresL00.df <- SresL00.df %>% mutate(Season = Season(date))
+
+```
+
+
+```{r 95%PI plot Sediment P release, echo=TRUE, message=FALSE, warning=FALSE}
+# Plotting the results
+plot_basics+
+  geom_line(data = SresL00.df, aes(x = date, y = `hyd50%`, color = "Median TP"))+
+  geom_line(data = SresL00.df, aes(x = date, y = `hyd_mean`, color = "Mean TP"))+
+  geom_ribbon(data = SresL00.df, aes(x = date, ymin = `all5%`, ymax = `all95%`, fill = "all"), alpha = 0.3)+
+  geom_ribbon(data = SresL00.df, aes(x = date, ymin = `parhyd5%`, ymax = `parhyd95%`, fill = "parhyd"), alpha = 0.3)+
+  # # geom_ribbon(data = Sres.df[which(Sconc.df$date %in% date_scen),], aes(x = date, ymin = `hyd16%`, ymax = `hyd84%`, fill = "hyd"), alpha = 0.3)+
+  geom_ribbon(data = SresL00.df, aes(x = date, ymin = `hyd5%`, ymax = `hyd95%`, fill = "hyd"), alpha = 0.3)+
+  facet_wrap(vars(Season))+
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 10))+
+  labs(x = "Year",
+       y = expression(atop(Internal~P~loading,"("*g/m^2/month*")")))+
+  scale_fill_manual("",values = c(`hyd` = "blue",
+                               `parhyd` = "green",
+                               `all` = "red"),
+                    labels = c("Hydro UC", "Parameter+Hydro UC", "All UC"),
+                       guide = guide_legend(override.aes = 
+                                              list(alpha = c(0.1,0.1,0.1))))+
+  scale_color_manual("", values = c(`Median TP` = "red",
+                                    `Mean TP` = "black"),
+                     labels = c(""),
+                     guide = "none")+
+  # ylim(0,200)+
+  geom_vline(xintercept = as.Date("2018-12-31", format = "%Y-%m-%d"), lty = 2)
+
+```
+
+
+
+# Saving the workspace
+```{r save file, echo=TRUE, message=FALSE, warning=FALSE}
+# Saving the file (last saved on 06/08/2023 10:00 PM) with mean central value
+# save.image("RWorkSpaces/JLPMv016p010_1.RData")
+
+```
+
+
+
+
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+End_timer10 <- Sys.time()
+
+# Total time taken to run the entire notebook
+Tot_time10 <- End_timer10 - Start_timer10
+Tot_time10
+```

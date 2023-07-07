@@ -1,0 +1,498 @@
+---
+title: "Jordan Lake Reservoir Model"
+subtitle: "Part3: Data visualization of Model simulation for 1983-2018 period - 2"
+author: "Smitom Borah"
+date: "04/25/2023"
+output: 
+  html_notebook:
+    toc : yes
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+
+---
+
+```{=html}
+<style type="text/css">
+
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+  text-align: center;
+}
+
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+  text-align: center;
+}
+
+h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Red;
+  text-align: center;
+}
+
+</style>
+```
+
+Time required to run the entire notebook: ~10 secs
+
+# Motivation
+In this notebook, we try to visualize the output generated in Part 1 (JLPMv016p001.Rmd).
+
+# Edit log
+*No new edit since its creation.*
+# Introduction
+In this notebook, we develop plots for the research article. Following plots are developed:
+
+1. Prior and posterior distribution
+2. Internal phosphorus loading
+
+Let us load the packages and workspace of JLPMv016p001.Rmd first.
+
+```{r packages, echo=TRUE, message=FALSE, warning=FALSE}
+# Clearing the working environment----
+cat("\014"); rm(list=ls(all=TRUE)); graphics.off() 
+
+# Start timer
+Start_timer3 <- Sys.time()
+
+# Loading the required packages
+library(tidyverse)
+library(gridExtra)
+library(ggpmisc)
+library(viridis)
+library(lubridate)
+library(grid)
+library(patchwork)
+
+
+# Loading Rworkspace of JLPMv016p001.Rmd
+load("RWorkSpaces/JLPMv016p001_1.RData")
+
+# Loading the functions
+# suppressMessages(source("Pmodels/functionsJorLak_no19.R"))
+suppressMessages(source("Pmodels/JLPMfunv16p001.R"))
+```
+Also, let us define basic plot elements before preparing the actual plots.
+
+```{r Basic plot specifications, echo=TRUE, message=FALSE, warning=FALSE}
+plot_basics <- ggplot()+
+  theme_bw()+
+  theme(legend.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"))
+```
+
+# Prior and posterior distribution
+
+Now, to prepare the posterior distribution plot, we sample every third parameter set from the last 10000 parameter sets generated from the MCMC simulation. For the prior distribution, we assume truncated normal distribution with mean and standard deviation observed from literature.
+
+```{r Prior and posterior distribution, echo=TRUE, message=FALSE, warning=FALSE}
+# Total area of the sediment (m^2)
+A_tot <- (11.94+12.92+17.28+6.057) *10^6
+
+# Assuming initial sediment content (kg)
+S_tot <- (0.544+0.589+0.789+0.279)*10^6
+
+# Sampling every third set from last 25000 samples
+ParSamples <- RAM$samples[seq((nrow(RAM$samples)-25000),nrow(RAM$samples),1),]
+ParSamplesDist = ParSamples %>% as_tibble %>%  dplyr::select(-sy) %>% as.matrix()
+ParSamplesDist[,1] = ParSamplesDist[,1]/vs_scal
+ParSamplesDist[,3] = ParSamplesDist[,3]/par_scal
+ParSamplesDist[,4] = ParSamplesDist[,4]/par_scal
+ParSamplesDist[,5] = ParSamplesDist[,5]-Sh_shift
+# ParSamplesDist[,8] = ParSamplesDist[,8]*2985000/(11.94*(10^6))/1
+ParSamplesDist[,8] = ParSamplesDist[,8]*(S_tot/A_tot)
+
+
+priorsUnsc<- list(
+  Vs =c("truncnorm", 0, Inf, 1.3,sd = 1.4),# DDG: notice scaling
+  Ks =c("truncnorm", 0, Inf, mean = .2, sd = .26),
+  Bs =c("truncnorm", 0, 1, mean = .001, sd = .001), 
+  Rs =c("truncnorm", 0, 1, mean = 0.003, sd = 0.0018),
+  Sh =c("truncnorm", -1, 1, .3, sd = .1),
+  ThetaR = c("truncnorm", 0, Inf,mean = 1.05, sd = .03),
+  ThetaV = c("truncnorm", 0, Inf,mean = 1.05, sd = .03),
+  # S1fac = c("truncnorm",0,5,mean = 1, sd = 0.548),
+  S1fac = c("truncnorm",0,5,mean = 1*(S_tot/A_tot), sd = 0.548*(S_tot/A_tot))
+  )
+
+
+ttl <- as.list(t(colnames(ParSamplesDist)))
+ttl[[1]] <- expression("v"~"["*m.mo^-1*"]")
+ttl[[2]] <- expression("k"~"["*mo^-1*"]")
+ttl[[3]] <- expression("B"~"["*mo^-1*"]")
+ttl[[4]] <- expression("R"~"["*mo^-1*"]")
+ttl[[5]] <- expression(psi)
+ttl[[6]] <- expression(theta[r])
+ttl[[7]] <- expression(theta[v])
+ttl[[8]] <- expression("S"["init"]~"["*kg.m^-2*"]")
+xlims = list()
+xlims[[1]] <- c(-1,12)
+xlims[[2]] <- c(-0.1,2)
+xlims[[3]] <- c(-.0005,.005)
+xlims[[4]] <- c(-.001,0.01)
+xlims[[5]] <- c(-.2,0.6)
+xlims[[6]] <- c(.95,1.15)
+xlims[[8]] <- c(-0.01,0.15)
+xlims[[7]] <- c(.95,1.15)
+names(xlims) <- colnames(ParSamplesDist)
+marg = NA
+
+
+# Loading functions to plot the posterior distributions
+source("Pmodels/functions_sysanal_plot_v3.R")
+
+# Ploting the prior and posterior distribution
+sysanal.plot.margsv2(postsamp = ParSamplesDist, pridist=priorsUnsc, titles=rep("",length(ttl)),ncol=4,mar=c(5.035,2.5,1.3,1.2),xlab=ttl,
+                     mgp= c(4, 1.6, 0), cex.lab =1.0,cex_axis=1.0,
+                     xlim = xlims,
+                     lgn = legend("topleft", x.intersp=0.2,legend =c("Prior", "Posterior"),  lty=c(2,1), col=c("black","black"), cex=1,bty = "n"))
+
+# Saving the plot
+png(file="OutputFiles/JLPMv016_PriPost.png",width = 6, height = 3.5, units = 'in', res = 1200)
+sysanal.plot.margsv2(postsamp = ParSamplesDist, pridist=priorsUnsc, titles=rep("",length(ttl)),ncol=4,mar=c(5.035,2.5,1.3,1.2),xlab=ttl,
+                     mgp= c(3.5, 1.1, 0), cex.lab =1.3,cex_axis=1.3,
+                     xlim = xlims,
+                     lgn = legend("topleft", x.intersp= 0.1,legend =c("Prior", "Posterior"),  lty=c(2,1), col=c("black","black"), cex=1,bty = "n"))
+dev.off()
+```
+
+```{r IPL calculation1, echo=TRUE, message=FALSE, warning=FALSE}
+# Sediment P release flux estimation
+## Sediment area
+sed_area <- 11.94+12.92+17.28+6.057 # [km^2]
+
+## Attaching a new data frame to MassFlows 
+JL_MassFlows <- MassFlows
+
+## Sediment P release flux in g/m^2/month units
+JL_MassFlows <- JL_MassFlows %>% mutate(sedP_res = (S1res+S2res+S3res+S4res)/(sed_area*1000))
+
+## Changing to datetype
+JL_MassFlows$Date <- as.Date(JL_MassFlows$Date, format = "%m/%d/%Y")
+
+## Adding season
+Season <- rep(c('Winter','Winter', 'Winter', 'Spring', 'Spring', 'Spring', 'Summer', 'Summer', 'Summer', 'Fall', 'Fall', 'Fall'), 36)
+
+JL_MassFlows<- JL_MassFlows %>% mutate(Season, Month = month(Date))
+```
+
+Let us quickly visualize the average monthly temperature in these months: 
+```{r monthly temperature, echo=TRUE, message=FALSE, warning=FALSE}
+## Visualizing average monthly temperature
+JL_temp_mon <- JL_MassFlows %>% group_by(Month,Season) %>% summarise(avg_temp = mean(Temp)) %>% mutate(mo = month.abb[Month])
+JL_temp_mon$mo <-factor(JL_temp_mon$mo, levels = JL_temp_mon$mo)
+JL_temp_plot <- plot_basics +
+  geom_col(data = JL_temp_mon,
+           aes(x = mo, y = avg_temp, fill = Season))+
+  scale_y_continuous(limits = c(0,30),expand = c(0,0))+
+  labs(title = "Mean monthly temperature in Jordan Lake",
+       x = "Month",
+       y = expression(Mean~temperature~(degree*C)))+
+  scale_fill_viridis(discrete = T,
+                     option = "D")
+
+JL_temp_plot
+
+```
+Now let us visualize the seasonal internal phosphorus loading in Jordan Lake during the study period (1983-2018): 
+
+```{r Seasonal IPL, echo=TRUE, message=FALSE, warning=FALSE}
+# Seasonal internal phosphorus loading
+JL_seas_Prel <- JL_MassFlows %>% group_by(year, Season) %>%
+  summarise(sedP_res_avg = mean(sedP_res),
+            Temp_avg = mean(Temp))
+
+# Selecting seasonal IPL in the study period; we can reduce the number of years
+JL_dec_Prel <- JL_seas_Prel[which(JL_seas_Prel$year %in%c(1983:2018)),] 
+
+# Factoring the seasons
+JL_dec_Prel$Season <- factor(JL_dec_Prel$Season,levels = c('Winter',  'Spring', 'Summer', 'Fall'))
+
+JL_sedP_rel <- plot_basics + 
+    geom_boxplot(data = JL_dec_Prel, aes(x=Season, y=sedP_res_avg), lwd=0.5, outlier.shape = NA)+
+  labs(x = "",
+       y = expression(Internal~P~loading~(g/m^2/mo)))+
+  scale_y_continuous(limits = c(0,0.7), 
+                     expand = c(0, 0), 
+                     breaks = seq(0,0.7,0.1))+
+  theme(aspect.ratio = 4/3,
+        axis.text = element_text(color="black"),
+        axis.ticks = element_line(color = "black"))+
+  stat_summary(data = JL_dec_Prel,aes(x=Season, y=sedP_res_avg), fun.y="mean",geom="point", shape=20, size=3, color="black",
+             position = position_dodge2(width = 0.75,
+                                        preserve = "single"))+
+  # geom_hline(yintercept = 0.491, lty = 2)
+  geom_segment(aes( x= "Spring",xend = "Summer",y = 0.491, yend=0.491), position = position_nudge(x = 0.5), lty = 2, color = "red")
+
+JL_sedP_rel
+
+# Saving the file
+# png(file="OutputFiles/JLPMv016_SeaIPL.png",height=4.5,width=3.5,units='in',res=1200)
+# JL_sedP_rel
+# dev.off()
+```
+
+The mean seasonal values of sediment P release:
+
+```{r Mean SedP rel 1, echo=TRUE, message=FALSE, warning=FALSE}
+JL_dec_Prel %>% group_by(Season) %>% summarise(MeanSedPrel = round(mean(sedP_res_avg), 2))
+```
+
+The percentage hike between from winter to summer season = $\frac{0.52-0.13}{0.13}\times 100$ = `r sprintf("%0.2f", ((0.52-0.13)/0.13*100))` %
+
+Let also recreate create a monthly mass flows plot:
+```{r Monthly Mass Transfer New, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a new data frame to create mass transfer plot
+MT_df_mo_NB <- MassFlows %>%
+  transmute(t = t,
+            Date = Date,
+            Year = year,
+            P_inflow = Seg1in+Seg2in+Seg3in+Seg4in,
+            P_recycle = S1res+S2res+S3res+S4res,
+            P_outflow = outflow,
+            P_settle = S1set+S2set+S3set+S4set,
+            P_burial = S1Bur+S2Bur+S3Bur+S4Bur,
+            P_water = M1 + M2 + M3 + M4)
+
+MT_df_mo_NB$Date <- as.Date(MT_df_mo_NB$Date, format = "%m/%d/%Y")
+
+MT_df_mo_NB <- MT_df_mo_NB %>% mutate(mo = month(Date)) %>% group_by(mo) %>%
+  summarise_at(vars(P_inflow:P_water),
+               funs(mean))
+
+# Changing all the values into metric tons
+MT_df_mo_NB[,2:7] <- MT_df_mo_NB[,2:7]/1000
+
+## Making all outgoing terms negative
+MT_df_mo_NB$P_outflow <- -MT_df_mo_NB$P_outflow
+MT_df_mo_NB$P_settle <- -MT_df_mo_NB$P_settle
+MT_df_mo_NB$P_burial <- -MT_df_mo_NB$P_burial
+MT_df_mo_NB <- MT_df_mo_NB[,1:6]
+
+# Adjust P_settle to make P_burial look part of P_settle
+MT_df_mo_NB$P_settle <- MT_df_mo_NB$P_settle - MT_df_mo_NB$P_burial
+
+# gathering the data
+MT_df_gat_mo_NB <- cbind(MT_df_mo_NB[1], stack(MT_df_mo_NB[2:6]))
+
+MT_df_gat_mo_NB$ind <- factor(MT_df_gat_mo_NB$ind, levels = c("P_inflow","P_recycle","P_burial", "P_outflow","P_settle" ))
+
+# Plotting the results
+TP_MassTransfer_mo_NB <- ggplot(data = MT_df_gat_mo_NB)+
+  geom_col(aes(x = mo, y = values, fill = ind), position = "stack", width = 0.75)+
+  scale_fill_manual("",values=c("orange red","orange", "transparent","skyblue4", "seagreen2"),
+                    label = c(expression(P[external]), expression(P[internal]),"",expression(P[outflow]), expression(P[settle])))+
+  labs(x = "",
+       y = expression(atop(Mass~transfer,rate~of~P~(MT/mo))))+
+  scale_x_continuous(breaks = seq(1,12),
+                     labels = month.abb)+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 0.5,
+        legend.text.align = 0,
+        legend.direction = "horizontal",
+        # legend.position = c(0.5,0.1),
+        legend.position = "bottom",
+        text = element_text(size = 14),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(color="black"),
+        axis.ticks = element_line(color = "black"))
+        # panel.background = element_rect(fill = "transparent"), 
+        # plot.background = element_rect(fill = "transparent", color = NA),
+        # legend.background = element_rect(fill = "transparent"),
+        # legend.box.background = element_rect(fill = "transparent", color = NA),
+        # legend.key = element_rect(fill = "transparent", colour = NA))
+
+TP_MassTransfer_mo_NB
+
+# Saving the plot
+# png(file="OutputFiles/JLPMv016_MassTransfer_mo_NB.png",height=4,width=6,units='in',res=1200)
+# TP_MassTransfer_mo_NB
+# dev.off()
+```
+
+Now let us put the monthly massflows and seasonal sediment P release plot together:
+```{r combined seasonal and monthly IPL, echo=TRUE, message=FALSE, warning=FALSE}
+# Seasonal sedment P release boxplot
+JL_sedP_rel1 <- plot_basics + 
+  # 1.5 times IQR range
+  geom_boxplot(data = JL_dec_Prel, aes(x=Season, y=sedP_res_avg), width=0.4, outlier.shape = NA, size = 0.3)+
+  # Entire range
+  # geom_boxplot(data = JL_dec_Prel, aes(x=Season, y=sedP_res_avg), width=0.4, outlier.shape = 1, size = 0.3, coef = 5, border = "white")+
+    geom_vline(xintercept = 1.5, lty = 3)+
+  geom_vline(xintercept = 2.5, lty = 3)+
+  geom_vline(xintercept = 3.5, lty = 3)+
+  labs(x = "",
+       y = expression(Internal~P~loading~(g/m^2/mo)))+
+  # scale_y_continuous(limits = c(0,0.7),
+  #                    expand = c(0, 0),
+  #                    breaks = seq(0,0.7,0.1))+
+    scale_y_continuous(limits = c(0,0.65),
+                     expand = c(0, 0),
+                     breaks = seq(0,0.6,0.1))+
+  theme(axis.ticks = element_line(color = "black"))+
+  stat_summary(data = JL_dec_Prel,aes(x=Season, y=sedP_res_avg), fun.y="mean",geom="point", shape=20, size=2, color="black",
+             position = position_dodge2(width = 0.75,
+                                        preserve = "single"))+
+  # geom_hline(yintercept = 0.491, lty = 2)
+  geom_segment(aes( x= 2.1,xend = 2.9,y = 0.491, yend=0.491), position = position_nudge(x = 0.5), lty = 2)
+JL_sedP_rel1
+
+# Just mean, median, and range of seasonal internal P loading
+## median
+JL_dec_Prel_med <- JL_dec_Prel %>% group_by(Season) %>% 
+  summarise(median_sedP_res_avg = median(sedP_res_avg))
+## range
+JL_dec_Prel_max <- JL_dec_Prel %>% group_by(Season) %>% 
+  summarise(sedP_res_avg = max(sedP_res_avg))
+JL_dec_Prel_min <- JL_dec_Prel %>% group_by(Season) %>% 
+  summarise(sedP_res_avg = min(sedP_res_avg))
+JL_dec_Prel_range <- rbind(JL_dec_Prel_max,JL_dec_Prel_min)
+## plot
+JL_sedP_rel2 <- plot_basics +
+  # median value
+  geom_boxplot(data = JL_dec_Prel_med, aes(x=Season, y=median_sedP_res_avg), width=0.4, outlier.shape = 1, size = 0.3, coef = 0, color = "transparent")+
+  
+  # winter range
+  geom_segment(data = JL_dec_Prel_range[which(JL_dec_Prel_range$Season=="Winter"),],aes( x= 0.5,xend = 0.5,y = min(sedP_res_avg), yend= max(sedP_res_avg)), position = position_nudge(x = 0.5), lty = 1, size = 0.3)+
+  
+  # Spring range
+  geom_segment(data = JL_dec_Prel_range[which(JL_dec_Prel_range$Season=="Spring"),],aes( x= 1.5,xend = 1.5,y = min(sedP_res_avg), yend= max(sedP_res_avg)), position = position_nudge(x = 0.5), lty = 1, size = 0.3)+
+  
+  # Summer range
+  geom_segment(data = JL_dec_Prel_range[which(JL_dec_Prel_range$Season=="Summer"),],aes( x= 2.5,xend = 2.5,y = min(sedP_res_avg), yend= max(sedP_res_avg)), position = position_nudge(x = 0.5), lty = 1, size = 0.3)+
+  
+  # Fall range
+  geom_segment(data = JL_dec_Prel_range[which(JL_dec_Prel_range$Season=="Fall"),],aes( x= 3.5,xend = 3.5,y = min(sedP_res_avg), yend= max(sedP_res_avg)), position = position_nudge(x = 0.5), lty = 1, size = 0.3)+
+  
+  geom_vline(xintercept = 1.5, lty = 3)+
+  geom_vline(xintercept = 2.5, lty = 3)+
+  geom_vline(xintercept = 3.5, lty = 3)+
+  labs(x = "",
+       y = expression(atop(IPL~flux,(g/m^2/mo))))+
+    scale_y_continuous(limits = c(0,0.7),
+                     expand = c(0, 0),
+                     breaks = seq(0,0.6,0.2))+
+  theme(axis.ticks = element_line(color = "black"),
+        plot.margin = unit(c(1,1,0,1), "cm"))+
+  stat_summary(data = JL_dec_Prel,aes(x=Season, y=sedP_res_avg), fun.y="mean",geom="point", shape=20, size=2, color="blue",
+             position = position_dodge2(width = 0.75,
+                                        preserve = "single"))+
+  geom_segment(aes( x= 2.1,xend = 2.9,y = 0.491, yend=0.491), position = position_nudge(x = 0.5), lty = 2)
+JL_sedP_rel2
+
+
+# Monthly mass transfer plot
+TP_MassTransfer_mo_NB1 <- ggplot(data = MT_df_gat_mo_NB)+
+  geom_col(aes(x = mo, y = values, fill = ind), position = "stack", width = 0.75)+
+  scale_fill_manual("",values=c("orange red","orange", "transparent","skyblue4", "seagreen2"),
+                    label = c(expression(P[external]), expression(P[internal]),"",expression(P[outflow]), expression(P[settle])))+
+  labs(x = "",
+       y = expression(atop(P~mass~transfer,(MT/mo))))+
+  scale_x_continuous(breaks = seq(1,12),
+                     labels = month.abb)+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  geom_vline(xintercept = 3.5, lty = 3)+
+  geom_vline(xintercept = 6.5, lty = 3)+
+  geom_vline(xintercept = 9.5, lty = 3)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.title.x = element_blank(),
+        # aspect.ratio = 0.5,
+        legend.text.align = 0,
+        legend.direction = "horizontal",
+        # legend.position = c(0.5,0.1),
+        legend.position = "bottom",
+        legend.margin=unit(0, "cm"),
+        text = element_text(size = 10),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color="black"),
+        axis.ticks = element_line(color = "black"),
+        legend.text = element_text(size = 10, color="black"))
+
+TP_MassTransfer_mo_NB1
+
+# grid.arrange(JL_sedP_rel1,TP_MassTransfer_mo_NB,nrow = 2 )
+
+
+# gridtext
+yleft <- textGrob("",
+                  rot = 90, gp = gpar(fontsize = 12))
+
+yright <- textGrob("",
+                   rot = 270, gp = gpar(fontsize = 12))
+
+bottom <- textGrob("", gp = gpar(fontsize = 12, col="black"))
+
+MssFlwSedP_plot <- {
+  # wrap_elements(yleft) +
+  {{JL_sedP_rel2} / {TP_MassTransfer_mo_NB1}}  +
+    
+  # wrap_elements(yright) +
+  plot_layout(widths=c(4,96)) } /
+  
+  bottom +
+  
+  plot_layout(heights=c(50,50, 0.1))
+
+MssFlwSedP_plot
+
+# Saving the plot
+# ggsave("OutputFiles/JLPMv016_MssFlwSedP_plot1.png",MssFlwSedP_plot,
+#        height=3.5,width=6,units='in',dpi=1200)
+# dev.off()
+```
+
+
+# Saving the workspace
+```{r file save, echo=TRUE, message=FALSE, warning=FALSE}
+# Saving the progress (date: 04-29-2023)
+# save.image("RWorkSpaces/JLPMv016p003_1.RData")
+
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+End_timer3 <- Sys.time()
+
+# Total time taken to run the entire notebook
+Tot_time3 <- End_timer3 - Start_timer3
+Tot_time3
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

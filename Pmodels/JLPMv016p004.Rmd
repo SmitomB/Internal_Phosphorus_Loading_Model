@@ -1,0 +1,715 @@
+---
+title: "Jordan Lake Reservoir Model"
+subtitle: "Part4: Developing a random forest model to predict the bottom to surface P ratios "
+author: "Smitom Borah"
+date: "04/25/2023"
+output: 
+  html_notebook:
+    toc : yes
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+
+---
+
+```{=html}
+<style type="text/css">
+
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+  text-align: center;
+}
+
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+  text-align: center;
+}
+
+h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Red;
+  text-align: center;
+}
+
+</style>
+```
+
+
+
+
+Time required to run the entire notebook: ~10 secs
+
+# Motivation
+In this notebook, we developed a random forest model that can be used to predict bottom to surface P ratio that is used to calculate the surface P concentration in the Jordan lake model. Most of the codes in this notebook is similar to the codes written in the notebook, *Additional025_Stratification_v02082022.Rmd*.
+
+# Edit log
+*No new edit since its creation.*
+
+# Introduction
+In this notebook, we develop the random forest model and visualize its performance in different segments.
+The random forest model was developed based on the following features:
+
+1. Average wind speed (m/s)
+2. 5weeks M.A. air temperature ($^\circ C$)
+3. 2weeks M.A. air temperature ($^\circ C$)
+4. Surface sampling depths (m)
+5. Bottom sampling depths (m)
+6. Month
+7. Segment
+
+We also calculate the seasonal median with the simulated bottom to surface P ratio for the period 1983-2018.
+
+```{r Packages, echo=TRUE, message=FALSE, warning=FALSE}
+# Clearing the environment----
+cat("\014"); rm(list=ls(all=TRUE)); graphics.off()
+
+# Start timer
+Start_timer4 <- Sys.time()
+
+# loading the required packages
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(FNN)
+library(gridExtra)
+library(kableExtra)
+library(caret)
+library(randomForest)
+library(zoo)
+library(plotly)
+
+# Loading functions script created by Dario
+# suppressMessages(source("Pmodels/functionsJorLak_no19.R")) 
+suppressMessages(source("Pmodels/JLPMfunv16p001.R"))
+```
+# Data 
+
+## Temperature data
+The temperature data is stored in the files: 
+ - *Sim_SurfaceWaterTemp_daily.csv* for surface temperature
+ - *Sim_BottomWaterTemp_daily.csv* for bottom temperature
+
+```{r Temp data, echo=TRUE, message=FALSE, warning=FALSE}
+# Adding temperature data
+## Simulated surface water temperature
+Sim_SurTemp <- read.csv("DataFiles/Sim_SurfaceWaterTemp_daily.csv") %>% drop_na()
+
+Sim_SurTemp <- Sim_SurTemp[,c("Date","Airtemp","AirTmp_14d", "WtrTemp_14d")]
+Sim_SurTemp$Date <- as.Date(Sim_SurTemp$Date)
+
+# Final data frame with daily 14 day M.A. air temperature 
+# (as substitute for surface water temperature)
+Sim_SurTemp <- rename(Sim_SurTemp, AirTemp = Airtemp, SurfaceTemp = AirTmp_14d)
+
+## Simulated bottom water temperature
+Sim_BotTemp <- read.csv("DataFiles/Sim_BottomWaterTemp_daily.csv") %>% drop_na()
+
+Sim_BotTemp <- Sim_BotTemp[,c("Date","AirTmp_35d", "WtrTemp_35d")]
+Sim_BotTemp$Date <- as.Date(Sim_BotTemp$Date, format = "%m/%d/%Y")
+
+# Final data frame with daily 35 day M.A. air temperature 
+# (as substitute for bottom water temperature)
+Sim_BotTemp <- rename(Sim_BotTemp, BottomTemp = AirTmp_35d)
+```
+
+## Wind data
+Wind  data was collected from KRDU airport. The data is stored in *RDU_windspeed.xlsx* in *DataFiles* folder.
+```{r Air data, echo=TRUE, message=FALSE, warning=FALSE}
+# Download the wind data 
+RDU_wind <- read_excel("DataFiles/RDU_windspeed.xlsx", range = "A13:C13892")
+
+# Making date column a date-time object
+RDU_wind$Date <- as.Date(RDU_wind$Date)
+
+# Monthly wind-speed
+## Average
+RDU_wind_avg_mo <- RDU_wind %>% drop_na() %>%
+  mutate(Month = month(Date)) %>% 
+  group_by(Month)%>%
+  summarise(Avg_speed = mean(`Average Wind Speed (mph)`))
+
+## Visualizing monthly windspeed
+ggplot(data = RDU_wind_avg_mo)+
+  geom_point(aes(x = Month, y = Avg_speed, color = "Average"), size = 2)+
+  theme_bw()+
+  theme(legend.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.8,0.9),
+        legend.title = element_blank())+
+  scale_color_manual(values = (c(`Average` = "red")))+
+  labs(x = "Months",
+       y = "Average wind speed (mph)")
+
+```
+
+## P data
+The P data is loaded from the following files:
+
+1. Segment 2: *Segment2_Pdata.xlsx*
+2. Segment 3: *Segment3_Pdata.xlsx* 
+3. Segment 4: *Segment4_Pdata.xlsx* 
+
+These files are present in the *DataFiles* folder.
+
+```{r P data function, echo=TRUE, message=FALSE, warning=FALSE}
+# Function to automate the data collection process
+CollectData <- function(FileName = "Segment2_Pdata.xlsx", SheetName = "report"){
+  ## Loading the raw file
+  Fname <- paste0("DataFiles/",FileName)
+  Seg_Praw <- read_excel(Fname, sheet = SheetName)
+  Seg_P <- Seg_Praw[,c("ActivityStartDate", 
+                       "ActivityStartTime/Time",
+                       "ActivityDepthHeightMeasure/MeasureValue",
+                       "ActivityDepthHeightMeasure/MeasureUnitCode",
+                       "CharacteristicName",
+                       "ResultSampleFractionText",
+                       "ResultMeasureValue",
+                       "ResultMeasure/MeasureUnitCode",
+                       "MonitoringLocationIdentifier",
+                       "USGSPCode",
+                       "ResultAnalyticalMethod/MethodName",
+                       "MethodDescriptionText")]
+  
+  ## renaming the columns
+  colnames(Seg_P) <- c("Date","Time","Depth","Depth_unit","P_type", "P_fraction", "P_conc",
+                        "P_unit","Site","Code","MethodName","MethodDesc")
+  ## make date a DateTime Object
+  Seg_P$Date <- as.Date(Seg_P$Date, format = "%Y-%m-%d")
+  
+  ## Changing characters to numeric
+  Seg_P[,c("Depth","P_conc")] <- apply(Seg_P[,c("Depth","P_conc")], 2, as.numeric)
+  
+  ## Change unit for depth to m
+  Seg_P$Depth[which(Seg_P$Depth_unit=="ft")] <- Seg_P$Depth[which(Seg_P$Depth_unit=="ft")]*0.3048
+  Seg_P$Depth_unit[which(Seg_P$Depth_unit=="ft")] <-"m"
+  Seg_P$Depth_unit[which(Seg_P$Depth_unit=="meters")] <-"m"
+  
+  ## Removing the dissolved P from the tables
+  Seg_P <- Seg_P[which(Seg_P$P_fraction=="Total"),]
+  
+  ## adding a column for month
+  Seg_P <- Seg_P %>% mutate(Month = month(Date))
+  
+  ## Separating into surface and bottom P concentraiton
+  ## if Depth <= 3 m -> Surface P concentration
+  ## if Depth > 3 m -> Bottom P concentration
+  
+  ## Adding a column to classify the P as surface or bottom P
+  Seg_P <- Seg_P %>% mutate(P_location = ifelse(Depth<=3,"surface","Bottom"))
+  
+  ## Option 1: Selecting only depth, monitoring site and P concentration from Seg_P
+  # Seg_Pdat <- Seg_P[,c("Date","Site","P_location", "P_conc", "Depth" )] %>% drop_na()
+  
+  ## Option 2: Selecting only depth and P concentration from Seg_P
+  Seg_Pdat <- Seg_P[,c("Date","P_location", "P_conc", "Depth" )] %>% drop_na()
+  
+  ## Removing diurnal variability
+  # Seg_Pdat <- Seg_Pdat %>% group_by(Date,Site, P_location) %>% summarise_at(.vars = c("P_conc", "Depth"), .funs = median)
+  Seg_Pdat <- Seg_Pdat %>% group_by(Date, P_location) %>% summarise_at(.vars = c("P_conc", "Depth"), .funs = mean)
+  
+  ## Spreading the data
+  ## Option 1:
+  # Seg_Pdat <- pivot_wider(data = Seg_Pdat,
+  #             id_cols = c(Date,Site),
+  #             names_from = P_location,
+  #             values_from = c("P_conc", "Depth")) %>% drop_na()
+  
+  ## Option 2:
+  Seg_Pdat <- pivot_wider(data = Seg_Pdat,
+                         id_cols = c(Date),
+                         names_from = P_location,
+                         values_from = c("P_conc", "Depth")) %>% 
+    drop_na()
+  
+  # Adding wind data to the segment phosphorus data
+  Seg_Pdat <- merge(Seg_Pdat, RDU_wind, by = "Date", all.x = T)
+  
+  ## Merging temperature data
+  Seg_Pdat <- merge(Seg_Pdat, Sim_SurTemp, by = "Date" )
+  Seg_Pdat <- merge(Seg_Pdat, Sim_BotTemp, by = "Date" )
+  
+  ## Absolute difference between bottom and surface measured depth
+  Seg_Pdat <- Seg_Pdat %>% mutate(TempDiff = abs(SurfaceTemp-BottomTemp))
+  
+  ## Calculating bottom to surface P ratio
+  Seg_Pdat <- Seg_Pdat%>% mutate(BoSuP = P_conc_Bottom/P_conc_surface)
+  
+  ## difference between bottom and surface measured depth
+  Seg_Pdat<- Seg_Pdat %>% mutate(level_diff = Depth_Bottom-Depth_surface,
+                                      Bottom_level_diff = Depth_Bottom-3)
+  
+  ## adding a column for month
+  Seg_Pdat <- Seg_Pdat %>% mutate(Month = month(Date),
+                                  Year = year(Date),
+                                  Segment = parse_number(strsplit(FileName, split = "_")[[1]][1]))  
+
+  
+  return(list(Seg_Praw, Seg_P, Seg_Pdat))
+}
+
+#===============================================
+## test
+# Seg.x_P <- CollectData()
+# Segx_Praw <- Seg.x_P[[1]]
+# Segx_P <- Seg.x_P[[2]]
+# Segx_Pdat <- Seg.x_P[[3]]
+
+```
+
+### Segment 2 
+```{r Seg 2 P data, echo=TRUE, message=FALSE, warning=FALSE}
+# Collecting P data from Segment 2
+Seg.2_P <- CollectData("Segment2_Pdata.xlsx","report")
+Seg2_Praw <- Seg.2_P[[1]]
+Seg2_P <- Seg.2_P[[2]]
+Seg2_Pdat <- Seg.2_P[[3]]
+
+# Segment 2 data frame
+head(Seg2_Pdat, n = nrow(Seg2_Pdat))
+
+
+```
+
+A plot of bottom to surface TP ratios in Segment 2:
+```{r Seg 2 P dat plot, echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(data = Seg2_Pdat , aes(x = Date, y = BoSuP))+
+  geom_point(size = 1, color = "black")+
+  labs(title = "Bottom to surface TP ratio")+
+  theme_bw()
+```
+
+### Segment 3
+```{r Seg 3 P data, echo=TRUE, message=FALSE, warning=FALSE}
+Seg.3_P <- CollectData("Segment3_Pdata.xlsx","report")
+Seg3_Praw <- Seg.3_P[[1]]
+Seg3_P <- Seg.3_P[[2]]
+Seg3_Pdat <- Seg.3_P[[3]]
+
+# Dropping the row 12 due absurdly high value
+Seg3_Pdat <- Seg3_Pdat[-12,]
+
+# Segment 3 data frame
+head(Seg3_Pdat, n = nrow(Seg3_Pdat))
+
+```
+
+A plot of bottom to surface TP ratios in Segment 3:
+```{r Seg 3 P dat plot, echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(data = Seg3_Pdat , aes(x = Date, y = BoSuP))+
+  geom_point(size = 1, color = "black")+
+  labs(title = "Bottom to surface TP ratio")+
+  theme_bw()
+```
+
+### Segment 4
+```{r Seg 4 P data, echo=TRUE, message=FALSE, warning=FALSE}
+Seg.4_P <- CollectData("Segment4_Pdata.xlsx","report")
+Seg4_Praw <- Seg.4_P[[1]]
+Seg4_P <- Seg.4_P[[2]]
+Seg4_Pdat <- Seg.4_P[[3]]
+
+
+# Segment 4 data frame
+head(Seg4_Pdat, n = nrow(Seg4_Pdat))
+
+```
+
+A plot of bottom to surface TP ratios in Segment 4:
+```{r Seg 4 P dat plot, echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(data = Seg4_Pdat , aes(x = Date, y = BoSuP))+
+  geom_point(size = 1, color = "black")+
+  labs(title = "Bottom to surface TP ratio")+
+  theme_bw()
+```
+
+## Combined dataset
+### Calibration dataset
+```{r}
+# Seed value
+seed.value <- 022022
+
+# fracttion of data for calibration
+frctn <- 1
+
+set.seed(seed.value)
+N2 <- createDataPartition(Seg2_Pdat$BoSuP, p = frctn, list = FALSE)
+N3 <- createDataPartition(Seg3_Pdat$BoSuP, p = frctn, list = FALSE)
+N4 <- createDataPartition(Seg4_Pdat$BoSuP, p = frctn, list = FALSE)
+SegP_dat <- rbind(Seg2_Pdat[N2,], Seg3_Pdat[N3,])
+SegP_dat <- rbind(SegP_dat, Seg4_Pdat[N4,])
+
+# Adding a column with changed units of wind speed (mph to m/s)
+SegP_dat$`Average Wind Speed (ms)` <- SegP_dat$`Average Wind Speed (mph)`*0.447
+SegP_dat$`Maximum Wind Speed (ms)` <- SegP_dat$`Maximum Wind Speed (mph)`*0.447
+
+# Quick view of the data frame
+head(SegP_dat, n = nrow(SegP_dat))
+
+# Total number of data points
+print(paste0("Number of calibration data points: ", nrow(SegP_dat)))
+
+# Unique data points
+print(paste0("Number of unique dates in the data points: ", length(unique(SegP_dat$Date))))
+
+```
+
+# Training the random forest model
+
+
+```{r RF model, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a vector of features
+combo <- c("Date","Average Wind Speed (ms)","BottomTemp","SurfaceTemp","BoSuP", "Month", "Depth_surface", "Depth_Bottom", "Segment")
+
+SegPfac1 <- SegP_dat[,combo]
+
+
+# renaming
+SegPfac1 <- SegPfac1 %>% rename(.,
+                                      Average.Wind.Speed.ms = `Average Wind Speed (ms)`)
+
+# Create random forest for regression
+set.seed(seed.value)
+BoSuP.rf <- randomForest(BoSuP ~ ., 
+                         data = select(SegPfac1, -Date ), 
+                         mtry =3, 
+                         ntree = 1000,
+                         importance = TRUE, 
+                         na.action = na.omit)
+
+# quick model performance
+BoSuP.rf
+
+plot(BoSuP.rf)
+
+# importance(BoSuP.rf)
+
+varImpPlot(BoSuP.rf)
+
+
+
+print(paste0("Coefficient of determination: ", VarExp(BoSuP.rf$predicted, BoSuP.rf$y)))
+
+
+# test
+# SegPfac1_test <- SegP_dat_test[,combo]
+# SegPfac1_test <- SegPfac1_test %>% rename(.,
+#                                       Average.Wind.Speed.ms = `Average Wind Speed (ms)`)
+# pred_vals <- predict(BoSuP.rf, newdata = select(SegPfac1_test, -Date, -BoSuP))
+# VarExp(pred_vals,SegPfac1_test$BoSuP)
+# plot(pred_vals, SegPfac1_test$BoSuP)
+# abline(coef = c(0,1))
+
+```
+```{r Plot resutls, echo=TRUE, message=FALSE, warning=FALSE}
+predicted_BoSuP <- data.frame(obs = BoSuP.rf$y, pred = BoSuP.rf$predicted)
+
+rf_pred_plot <- ggplot()+
+  geom_point(data = predicted_BoSuP, aes(x = obs, y = pred))+
+  geom_abline( intercept = 0, lty = 2)+
+  theme_bw()+
+  theme(aspect.ratio = 1,
+        legend.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10),
+        axis.text = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        axis.title = element_text(size = 10))+
+  labs(x = expression(Observed~R["i,b:s"]),
+       y = expression(Predicted~R["i,b:s"]))+
+  scale_y_continuous(limits = c(0,5), 
+                     labels = c("","1.0","2.0","3.0","4.0","5.0"),
+                     expand = c(0,0))+
+  scale_x_continuous(limits = c(0,10),
+                     expand = c(0,0))+
+  coord_flip()
+rf_pred_plot
+
+# Saving the plot
+# png(file="OutputFiles/JLPMv016_rf_pred_plot.png",height=4,width=6,units='in',res=1200)
+# rf_pred_plot
+# dev.off()
+
+hist((predicted_BoSuP$obs-predicted_BoSuP$pred))
+
+```
+
+
+
+# Predicting daily bottom to surface P ratio (1983-2018)
+## Hypolimnion mid-depth
+Now, let us prepare the input data for daily bottom to surface TP ratio prediction using the trained random forest. We will first load and process the data from *HypolimnionCalcs.xlsx* file.
+```{r Hypolimnetic depth, echo=TRUE, message=FALSE, warning=FALSE}
+# loading the monthly hypolimnetic depths data
+hypo.midDepth.raw <- read_excel("DataFiles/HypolimnionCalcs.xlsx", 
+                                sheet = "Sheet1", range = "A2:Y434")%>%
+  rename(.,
+         H1m = `H1 m...22`,
+         H2m = `H2 m...23`,
+         H3m = `H3 m...24`,
+         H4m = `H4 m...25`)
+
+# Only segments 2-4; units in m
+hypo.midDepth <- hypo.midDepth.raw[,c("start_d", "H2m", "H3m", "H4m")]
+
+# Create DateTime object for entire duration
+p.o.r <- data.frame(start_d = seq(as.Date("1983-01-01"), as.Date("2018-12-31"),  by = "1 day"))
+
+# merging
+hypo.midDepth$start_d <- as.Date(hypo.midDepth$start_d) # changing to DateTime type
+hypo.midDepth <- merge(p.o.r, hypo.midDepth, by = "start_d", all.x = T)
+
+# Filling the daily values from the monthly values
+hypo.midDepth <- na.locf(na.locf(hypo.midDepth), fromLast = T)
+# hypo.midDepth <- na.locf(na.locf(hypo.midDepth))
+
+# Renaming the date column
+hypo.midDepth <- hypo.midDepth %>% rename(.,
+                                          Date = start_d)
+```
+
+The median depth to mid-point of the hypolimnion in each segment is as follows:
+```{r Median hypolimnian mid-depth, echo=TRUE, message=FALSE, warning=FALSE}
+sapply(hypo.midDepth[,c(2:4)], median)
+```
+
+
+## Input data
+```{r Input P data fut, echo=TRUE, message=FALSE, warning=FALSE}
+# Function to arrange the input data
+pred_df <- function(sur_dep = 1.5, bot_dep = hypo.midDepth$H2m, combox, x = 2){
+
+  p.o.r <- seq(as.Date("1983-01-01"), as.Date("2018-12-31"),  by = "1 day")
+  air.data <- RDU_wind[which(RDU_wind$Date %in% p.o.r), c(1,2)]
+  botT.data <- Sim_BotTemp[which(Sim_BotTemp$Date %in% p.o.r), c(1,2)]
+  surT.data <- Sim_SurTemp[which(Sim_SurTemp$Date %in% p.o.r), c(1,3)]
+  surD.data <- rep(sur_dep, length(p.o.r))
+  botD.data <- bot_dep
+
+  
+  # merging the datasets
+  pred.data <- merge(air.data, botT.data, by = "Date")
+  pred.data <- merge(pred.data, surT.data, by = "Date")
+  
+  pred.data <- data.frame(pred.data,
+                          Depth_surface = surD.data,
+                          Depth_Bottom = botD.data)
+  
+  pred.data <- pred.data %>% mutate(TempDiff = abs(SurfaceTemp - BottomTemp),
+                                    level_diff = Depth_Bottom -Depth_surface,
+                                    Month = month(Date),
+                                    Segment = rep(x, length(p.o.r)))
+  
+  # Adding a column for wind speed in ms 
+  pred.data$Average.Wind.Speed..ms. <- pred.data$Average.Wind.Speed..mph.*0.447
+  
+  pred.data <- pred.data %>% rename(.,
+                                  Average.Wind.Speed.ms = Average.Wind.Speed..ms.)
+
+  pred.data <- pred.data[,combox]
+  
+  pred.data <- pred.data %>% drop_na()
+  
+  return(pred.data)
+}
+
+# Creating a vector of input features
+pred_combo <- c("Date","Average.Wind.Speed.ms", "BottomTemp","SurfaceTemp", "Month", "Depth_surface", "Depth_Bottom", "Segment")
+
+# Segment 2
+pred.data.2 <- pred_df(1.5,hypo.midDepth$H2m, pred_combo,2)
+
+# Segment 3
+pred.data.3 <- pred_df(1.5,hypo.midDepth$H3m, pred_combo,3)
+
+# Segment 4
+pred.data.4 <- pred_df(1.5,hypo.midDepth$H4m, pred_combo,4)
+
+```
+
+## Simulated data for each segment
+```{r}
+# Function to generate simulated data for each segment
+sim_data<- function(p_dat = pred.data.2, segNo = Seg2_Pdat){
+  pred_vals <- predict(BoSuP.rf, newdata = select(p_dat, -Date))
+  p_dat <- cbind(p_dat, pred_BoSuP = pred_vals)
+  
+  # Adding the observed data
+  p_dat <- merge(p_dat,  segNo[, c("Date", "BoSuP")], by = "Date", all.x = T)
+  return(p_dat)
+}
+
+# Segment 2
+pred.data.2 <- sim_data()
+
+# Segment 3
+pred.data.3 <- sim_data(pred.data.3, Seg3_Pdat)
+
+
+# Segment 4
+pred.data.4 <- sim_data(pred.data.4, Seg4_Pdat)
+
+```
+
+
+## Segmentwise prediction efficiency
+### Segment 2
+```{r pred Seg2 plot, echo=TRUE, message=FALSE, warning=FALSE, out.width="100%"}
+ggplot(data = pred.data.2)+
+  geom_line(aes(x = Date, 
+                y = pred_BoSuP))+
+  geom_point(aes(x = Date,
+                 y = BoSuP), color = "red", alpha = 0.6)+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"))+
+  scale_y_continuous("Bottom to surface TP ratio")
+```
+
+### Segment 3
+```{r pred Seg3 plot, echo=TRUE, message=FALSE, warning=FALSE, out.width="100%"}
+ggplot(data = pred.data.3)+
+  geom_line(aes(x = Date, 
+                y = pred_BoSuP))+
+  geom_point(aes(x = Date,
+                 y = BoSuP), color = "red", alpha = 0.6)+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"))+
+  scale_y_continuous("Bottom to surface TP ratio")
+
+```
+
+### Segment 4
+```{r pred Seg4 plot, echo=TRUE, message=FALSE, warning=FALSE, out.width="100%"}
+ggplot(data = pred.data.4)+
+  geom_line(aes(x = Date, 
+                y = pred_BoSuP))+
+  geom_point(aes(x = Date,
+                 y = BoSuP), color = "red", alpha = 0.6)+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"))+
+  scale_y_continuous("Bottom to surface TP ratio")
+```
+
+# Seasonal median
+```{r Seasonal Median, echo=TRUE, message=FALSE, warning=FALSE}
+# Predicted dataframe
+pred.data <- rbind(pred.data.2, pred.data.3)
+pred.data <- rbind(pred.data, pred.data.4)
+
+# Adding column for season
+pred.data1 <- pred.data
+pred.data <- pred.data %>%
+  mutate(Season = ifelse(Month%in%c(12,1:5), 1, ifelse(Month%in%c(6:8),2,3)))
+
+# Seasonal median
+pred.data.med <-pred.data %>% group_by(Segment, Season) %>% summarise(median = median(pred_BoSuP),
+                                                                              count = n())
+pred.data.med <- select(pred.data.med, -count)
+
+pred.data.med$median <- round(pred.data.med$median,1)
+pred.data.med <- spread(pred.data.med, key = Season, value = median)
+
+kable(pred.data.med) %>% kable_styling(full_width = T)
+
+# Alternate seasonal median
+pred.data1 <- pred.data1 %>%
+  mutate(Season = ifelse(Month%in%c(1:3), 1, ifelse(Month%in%c(4:6),2,ifelse(Month%in%c(7:9),3,4))))
+
+pred.data1.med <-pred.data1 %>% group_by(Segment, Season) %>% summarise(median = median(pred_BoSuP),
+                                                                              count = n())
+pred.data1.med <- select(pred.data1.med, -count)
+
+pred.data1.med$median <- round(pred.data1.med$median,1)
+pred.data1.med <- spread(pred.data1.med, key = Season, value = median)
+
+kable(pred.data1.med) %>% kable_styling(full_width = T)
+
+# overall seasonal range
+pred.data1_ove <- pred.data1 %>% group_by(Season) %>% summarise(Avg = mean(pred_BoSuP),
+                                                                med = median(pred_BoSuP),
+                                                                min = min(pred_BoSuP),
+                                                                max = max(pred_BoSuP))
+```
+
+
+
+
+# Saving the files
+```{r}
+# Saving the workspace
+# save.image("RWorkSpaces/JLPMv016p004_1.RData")
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+End_timer4 <- Sys.time()
+
+# Total time taken to run the entire notebook
+Tot_time4 <- End_timer4 - Start_timer4
+Tot_time4
+```
+
+
+Although these files were originally saved from Additional025_Stratification_v02082022_RF4.Rmd, we copy the related codes into this notebook as well.
+```{r export to excel, echo=TRUE, message=FALSE, warning=FALSE}
+# saving Segment 2 simulated data
+# write.csv(pred.data.2, "DataFiles/predBoSuP_Seg2RF4.csv", append = FALSE)
+
+# saving Segment 3 simulated data
+# write.csv(pred.data.3, "DataFiles/predBoSuP_Seg3RF4.csv", append = FALSE)
+
+# saving Segment 4 simulated data
+# write.csv(pred.data.4, "DataFiles/predBoSuP_Seg4RF4.csv", append = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

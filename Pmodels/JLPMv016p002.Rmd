@@ -1,0 +1,1547 @@
+---
+title: "Jordan Lake Reservoir Model"
+subtitle: "Part2: Data visualization of Model simulation for 1983-2018 period - 1"
+author: "Smitom Borah"
+date: "04/25/2023"
+output: 
+  html_notebook:
+    toc : yes
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+
+---
+```{=html}
+<style type="text/css">
+
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+  text-align: center;
+}
+
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+  text-align: center;
+}
+
+h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Red;
+  text-align: center;
+}
+
+</style>
+```
+
+Time required to run the entire notebook: ~10 mins
+
+# Motivation
+In this notebook, we try to visualize the output generated in Part 1 (JLPMv016p001.Rmd).
+
+# Edit log
+*No new edits since its creation.*
+
+# Introduction
+In this notebook, we develop plots for the research article. Following plots are developed:
+
+1. 1:1 observed vs predicted scatter plot
+2. Times series of TP concentration 
+3. Mass Transfer plot
+
+Let us load the packages and workspace of JLPMv016p001.Rmd first.
+
+```{r packages,  echo=TRUE, message=FALSE, warning=FALSE}
+# Clearing the working environment----
+cat("\014"); rm(list=ls(all=TRUE)); graphics.off() 
+
+# Start timer
+Start_timer2 <- Sys.time()
+
+# Loading the required packages
+library(tidyverse)
+library(gridExtra)
+library(grid)
+library(gridtext)
+library(patchwork)
+library(randomForest)
+library(lubridate)
+
+# Loading Rworkspace of JLPMv016p001.Rmd
+load("RWorkSpaces/JLPMv016p001_1.RData")
+
+# Loading the functions
+# suppressMessages(source("Pmodels/functionsJorLak_no19.R"))
+suppressMessages(source("Pmodels/JLPMfunv16p001.R"))
+```
+
+Also, let us define basic plot elements before preparing the actual plots.
+
+```{r Basic plot specifications, echo=TRUE, message=FALSE, warning=FALSE}
+plot_basics <- ggplot()+
+  theme_bw()+
+  theme(legend.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"))
+```
+
+
+# 1:1 observed vs Predicted scatter plot
+
+The 1:1 scatter plot of observed and predicted TP values is prepared in this section. We identify different segments with different colors and also report the coefficient of determination (R^2^) in the final plot.
+
+```{r 1:1_Scatterplot, echo=TRUE, message=FALSE, warning=FALSE}
+# 1:1 scatter plot of observed and predicted TP concentration
+TP_scatter <- plot_basics +
+  geom_point(data = outff, aes(x = obs, y = value, color = variable), size =2, alpha = 0.4)+
+  theme(legend.position = c(0.2,0.88),
+        legend.background = element_rect(fill="transparent",
+                                  size=0.5, linetype="blank", 
+                                  colour ="black"),
+        legend.title.align = 0.5,
+        # legend.box.margin = margin(10,10,6,6),
+        legend.direction = "horizontal",
+        aspect.ratio = 1)+
+  xlim(0,700)+ylim(0,700)+
+  scale_color_manual("",
+                     labels = c("1", "2", "3", "4"), 
+                     values = c("blue", "red", "green", "purple"))+
+  labs(x = expression(Observed~TP~"("*mu*g*"/"*L*")"),
+       y = expression(Predicted~TP~"("*mu*g*"/"*L*")"))+
+  geom_abline( intercept = 0, lty = 2)+
+  guides(color=guide_legend(nrow=2, byrow=TRUE))+
+  # geom_text(x = 500, y = 650, label = sprintf("italic(R^2) == %.3f", as.numeric(VarExp(outff[,"value"],outff[,"obs"]))) , parse = T)
+  geom_text(data = outff,y = 2.60, x = 2.20, label = sprintf("R^2 == %.3f", as.numeric(VarExp(outff[,"value"],outff[,"obs"]))) , parse = T, size = 4)+
+     scale_x_log10() +
+     scale_y_log10()
+
+TP_scatter
+
+
+
+# Creating an output file
+# png(file="OutputFiles/JLPMv016_TPScatterPlot.png",height=4,width=6,units='in',res=1200)
+# TP_scatter
+# dev.off()
+  
+```
+
+Let us try to recreate the above figure but add segment wise coefficient of determination and RMSE values.
+
+```{r scatter plot with performance, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a ggplot of scatter plot
+TP_scatter1 <- plot_basics +
+  geom_point(data = outff, aes(x = value , y = obs, color = variable), size =1)+
+  theme(legend.position = "None",
+        # legend.position = c(0.1,0.8),
+        legend.background = element_rect(fill="transparent",
+                                         size=0.5, linetype="blank", 
+                                         colour ="black"),
+        legend.title.align = 0.5,
+        # legend.box.margin = margin(10,10,6,6),
+        legend.direction = "horizontal",
+        aspect.ratio = 1)+
+  # xlim(0,1000)+ylim(0,1000)+
+  scale_color_manual("",
+                     labels = c("1", "2", "3", "4"), 
+                     values = c("blue", "red", "green", "purple"))+
+  labs(x = expression(Predicted~P~"("*mu*g*"/"*L*")"),
+       y = expression(Observed~P~"("*mu*g*"/"*L*")"))+
+  geom_abline( intercept = 0, lty = 2)+
+  guides(color=guide_legend(nrow=4, byrow=TRUE))+
+  # geom_text(x = 500, y = 650, label = sprintf("italic(R^2) == %.3f", as.numeric(VarExp(outff[,"value"],outff[,"obs"]))) , parse = T)
+  # geom_text(data = outff,y = 2.60, x = 2.20, label = sprintf("R^2 == %.3f", as.numeric(VarExp(outff[,"value"],outff[,"obs"]))) , parse = T, size = 5)+
+  scale_x_log10(limits = c(10,1000)) +
+  scale_y_log10(limits = c(10,1000))+
+  theme(axis.title = element_text(size = 10))
+
+# TP_scatter1
+
+# Creating a separate data frame of model performance
+PModPer.df <- PModPer
+
+# Tidying the data in the data frame
+PModPer.df$Segment <- c("1", "2", "3", "4", "All")
+PModPer.df$R2 <- round(as.numeric(PModPer.df$R2), digits = 2)
+
+PModPer.df$RMSE <- round(PModPer.df$RMSE, digits = 3)
+colnames(PModPer.df) <- c("Segment", "R^2", "RMSE (mg/L)")
+
+
+# Preparing the tableGrob
+PModPer.col <- matrix("black", nrow(PModPer.df),
+                      ncol(PModPer.df))
+PModPer.col[1:4,1] <- c("blue", "red", "green", "purple")
+PModPer.fil <- matrix("transparent", 
+                      nrow(PModPer.df), 
+                      ncol(PModPer.df))
+
+tt <- ttheme_minimal(core=list(fg_params = 
+                                 list(col = PModPer.col, cex = 0.8),
+                               bg_params = list(col = NA)),
+                     rowhead=list(bg_params = list(col=NA)),
+                     colhead=list(fg_params = list(parse=TRUE, cex = 0.8),
+                                  bg_params = list(col=NA)))
+
+PModPer.df = tableGrob(PModPer.df, theme = tt, rows = NULL)
+
+grid.arrange(TP_scatter1,PModPer.df,nrow = 1 )
+
+# Creating an output file
+# png(file="OutputFiles/JLPMv016_TPScatterPlot.png",height=4,width=6,units='in',res=1200)
+# grid.arrange(TP_scatter1,PModPer.df,nrow = 1 )
+# dev.off()
+
+
+```
+
+# Times series of TP concentration
+## Segment-wise TP reduction (%) from first to last decade
+Let us first calculate how average TP concentrations have changed from first decade to the last decade.
+
+```{r decadal AvgTP change, echo=TRUE, message=FALSE, warning=FALSE}
+# Calculating average reduction in the TP concentration over first and last decade
+ConcPdf <- MassFlows[,c("year", "mo", "C1", "C2sur", "C3sur", "C4sur")] %>% 
+  group_by(year) %>% 
+  summarise_at(.vars = c("C1", "C2sur", "C3sur", "C4sur"),
+               .funs = mean)%>%
+  mutate(decade = ifelse(year<=1992,
+                         "first decade",
+                         ifelse(year>=2009 & year<=2018, "last decade", NA))) %>%
+  drop_na() %>% 
+  group_by(decade) %>% 
+  summarise_at(.vars = c("C1", "C2sur", "C3sur", "C4sur"),
+               .funs = mean) %>% 
+  t  %>% 
+  janitor::row_to_names(.,1)%>% 
+  apply(.,2,as.numeric)%>%
+  as.data.frame() %>%
+  mutate(Pert_red = ((`first decade` - `last decade`)/`first decade`)*100,
+         segment = c(1,2,3,4))
+
+kableExtra::kable(head(ConcPdf[,c(4,1,2,3)]), "pipe",
+                  col.names = c("Segment",
+                                "First decade conc",
+                                "Second decade conc",
+                                "Percentage reduction"))
+```
+
+## Segment-wise TP reduction (%) in Periods 1, 2, and 3
+If we divide the study period into 3 periods: period 1 (1983 – 1994), period 2 (1995 – 2006), and period 3 (2007 – 2018), let us see how the TP concentrations changed.
+
+```{r decadal AvgTP change1, echo=TRUE, message=FALSE, warning=FALSE}
+# Calculating average reduction in the TP concentration over first and last decade
+ConcPdf1 <- MassFlows[,c("year", "mo", "C1", "C2sur", "C3sur", "C4sur")] %>% 
+  group_by(year) %>% 
+  summarise_at(.vars = c("C1", "C2sur", "C3sur", "C4sur"),
+               .funs = mean)%>%
+  mutate(Period = ifelse(year<=1994, 
+                         "period1",
+                         ifelse(year>=1995 & year<=2006, 
+                                "period2",
+                                ifelse(year>=2007 & year<=2018, 
+                                "period3", NA)))) %>%
+  drop_na() %>% 
+  group_by(Period) %>% 
+  summarise_at(.vars = c("C1", "C2sur", "C3sur", "C4sur"),
+               .funs = mean) %>% 
+  t  %>% 
+  janitor::row_to_names(.,1)%>% 
+  apply(.,2,as.numeric)%>%
+  as.data.frame() %>%
+  mutate(Pert_red12 = ((`period1` - `period2`)/`period1`)*100,
+         Pert_red23 = ((`period2` - `period3`)/`period2`)*100,
+         Pert_red13 = ((`period1` - `period3`)/`period1`)*100,
+         segment = c(1,2,3,4))
+
+kableExtra::kable(head(ConcPdf1[,c(7,1,2,3,4,5,6)]), "pipe",
+                  col.names = c("Segment",
+                                "Period1 conc",
+                                "Period2 conc",
+                                "Period3 conc",
+                                "Percentage reduction P1 to P2",
+                                "Percentage reduction P2 to P3",
+                                "Percentage reduction P1 to P3"))
+```
+
+## Overall TP reduction (%) in Periods 1, 2, and 3
+Let us also calculate how overall TP changed in this reservoir:
+```{r overall TP red, echo=TRUE, message=FALSE, warning=FALSE}
+# Calculating average reduction in the TP concentration over first and last decade
+ConcPdf2 <- MassFlows[,c("year", "mo", "C1", "C2sur", "C3sur", "C4sur")] %>%
+  # Average concentration in Jordan Lake
+  mutate(Avg_C = rowMeans(select(.,c(C1, C2sur, C3sur, C4sur)), na.rm = TRUE))%>%
+  # Grouping by year
+  group_by(year) %>%
+  # Summarizing the average TP concentration
+  summarise_at(.vars = c("Avg_C"),
+               .funs = mean)%>%
+  # Add the periods
+  mutate(Period = ifelse(year<=1994,
+                         "period1",
+                         ifelse(year>=1995 & year<=2006,
+                                "period2",
+                                ifelse(year>=2007 & year<=2018,
+                                "period3", NA)))) %>%
+  drop_na() %>%
+  # Grouping by Periods
+  group_by(Period) %>%
+  summarise_at(.vars =c("Avg_C"),
+               .funs = mean) %>%
+  t %>%
+  janitor::row_to_names(row_number = 1)%>%
+  apply(.,2,as.numeric)%>%
+  t %>%
+  as.data.frame()%>%
+  mutate(Pert_red12 = ((`period1` - `period2`)/`period1`)*100,
+         Pert_red23 = ((`period2` - `period3`)/`period2`)*100,
+         Pert_red13 = ((`period1` - `period3`)/`period1`)*100)
+kableExtra::kable(head(ConcPdf2), "pipe",
+                  col.names = c("Period1 conc",
+                                "Period2 conc",
+                                "Period3 conc",
+                                "Percentage reduction P1 to P2",
+                                "Percentage reduction P2 to P3",
+                                "Percentage reduction P1 to P3"))
+```
+
+
+Overall, percentage reduction in TP from period 1 to period 2 is `r sprintf("%0.2f", round(mean(ConcPdf2$Pert_red12),2))` % and that from period 2 to 3 is `r sprintf("%0.2f", round(mean(ConcPdf2$Pert_red23),2))` %
+
+## Predicted TP with prediction invertal
+Now let us prepare the prediction interval. We plan to use 90% prediction interval for out study.
+
+```{r TP concentration, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# setting a timer
+start_time <- Sys.time()
+
+# Daily period of record
+date.cali.daily <- floor_date(seq(ymd('1983-01-01'),
+                                  ymd('2018-12-31'), 
+                                  by = 'day'), 
+                        unit = "day")
+
+
+
+## Period of record
+date_cali <- floor_date(seq(ymd('1983-01-01'),ymd('2018-12-01'), by = 'month'), unit = "month")
+
+
+# Initial parameters
+# Percentage reduction in external P loading
+exPL00 <- -0
+# Number of posterior parameter samples
+N <- 1000
+
+# Inputs ----
+Popt_par <- opt_prm
+PinpDF <- RoutMOdin
+Pinp <- RoutMOdin %>% creaInp(.,tlim=nrow(.))
+Pico <- Const_lis 
+Pico$timestep <- 1:length(Pinp$A1t)
+Pico$vs_scal <- vs_scal
+Pico$par_scal <- par_scal
+Pico$Rbs2 <- BoSuP_MoDf$Seg2_Rp
+Pico$Rbs3 <- BoSuP_MoDf$Seg3_Rp
+Pico$Rbs4 <- BoSuP_MoDf$Seg4_Rp
+
+
+# Setting seed
+set.seed(5000)
+# posterior samp 
+postPsmpl <- RAM$samples[seq((nrow(RAM$samples)-10000),nrow(RAM$samples),length.out =N),]
+
+# Separating the observations ----
+Pobs <- obs %>% transmute(cale_date=myd(paste0(as.character(ym),"-1")), 
+                          TPugL = obs,variable)
+
+# Check for segments ----
+all_seg <- Pobs %>% pull(variable) %>% unique # should 4 : "C1","C2","C3" and "C4"
+
+# Loading the functions file ----
+source("Pmodels/JLPMfunv16p002.R") # same as functionsJorLak_Feb22.R
+
+# Setting up the dataframe to hold all the iteration in one space
+## For Confidence interval
+meanDFL00 <- tibble(sce_j=rep(exPL00, N),par_i=seq(1:N),Psim=vector("list",N))
+
+## For Prediction interval
+predDFL00 <- meanDFL00
+
+
+## N iterations 
+for (i in 1:N){
+  
+  # Selecting the nutrient scenario and parameter set
+  EP_red <-  meanDFL00[i, "sce_j"][[1]]
+  parPi <- postPsmpl[meanDFL00[i, "par_i"][[1]],]
+  
+  
+  # Arranging the dataset
+  PinpCaSc <- PinpDF %>% creaInp(.,tlim=nrow(.))
+  Pico$timestep <- 1:length(PinpCaSc$A1t)
+  
+  PmeanRes <- mod_wrap_pred_v3(inp_dat=PinpCaSc,
+                               FixInp_lis=Pico,
+                               CalPar=parPi) %>%
+    dplyr::select(matches("C1|C.sur"),S1,S2,S3,S4,temperature) %>%
+    `colnames<-`(substring(colnames(.),1,2)) %>%
+    add_column(.,cale_date=c(date_cali))
+  
+  PmeanRes <- PmeanRes %>% mutate(S1res = (parPi["Rs"]/100)*S1*(parPi["ThetaR"]^(te-20)),
+                                  S2res = (parPi["Rs"]/100)*S2*(parPi["ThetaR"]^(te-20)),
+                                  S3res = (parPi["Rs"]/100)*S3*(parPi["ThetaR"]^(te-20)),
+                                  S4res = (parPi["Rs"]/100)*S4*(parPi["ThetaR"]^(te-20)),
+                                  Sconc = (S1+S2+S3+S4)/(49.02*10^3),
+                                  Sres = (S1res+S2res+S3res+S4res)/(49.02*10^3))
+  
+  PpredRes <- PmeanRes %>%  # only adds observ error to Conc
+    mutate_each(funs(sysanal.boxcox(., l1,l2)),-c(cale_date)) %>% # transform
+    mutate_each(funs(.+rnorm(length(.),0,parPi["sy"])),-c(cale_date)) %>%  # add P error
+    mutate_each(funs(sysanal.boxcox.inv(., l1,l2)),-c(cale_date)) # back transform
+  
+  meanDFL00[i,"Psim"][[1]] <- PmeanRes %>% list
+  predDFL00[i,"Psim"][[1]] <- PpredRes %>% list
+  
+  svMisc::progress((i/N)*100)
+  Sys.sleep(0.1)
+  if (i == N) message("Done!")
+}
+
+# Ending the timer
+end_time <- Sys.time()
+
+```
+Time taken to run the above code chunk:
+```{r time taken, echo=TRUE, message=FALSE, warning=FALSE}
+# Total tile taken
+end_time - start_time
+```
+
+```{r PI function, echo=TRUE, message=FALSE, warning=FALSE}
+# Function to calculate prediction interval
+PI_func <- function(Cx, PI_low = 2.5, PI_high = 97.5){
+  #------------------------------------------------------
+  # Cx <- Segment Number
+  # PI_low <- lower limit of Prediction Interval in %
+  # PI_high <- upper limit of Prediction Interval in %
+  #-------------------------------------------------------
+
+  CI_TPx_L00_df <- meanDFL00 %>%
+  pull("Psim") %>% sapply(.,"[[", Cx) %>% t 
+colnames(CI_TPx_L00_df) <- c(date_cali) %>% as.character()
+
+CI_TPx_L00 <- apply(CI_TPx_L00_df, 2 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100)))%>% t %>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var="cale_date")%>% 
+  mutate(cale_date=ymd(cale_date)) %>% rename_at(vars(-cale_date),function(x) paste0("cred",x))
+
+### Adding observed values
+CI_TPx_L00 <- Pobs %>% dplyr::filter(variable==Cx) %>% left_join(CI_TPx_L00,.)%>% dplyr::filter(year(cale_date)>=1983&year(cale_date)<=2099)  %>%
+  as_tibble() 
+
+## Prediction interval ----
+PI_TPx_L00_df <- predDFL00 %>%
+  pull("Psim") %>% sapply(.,"[[", Cx) %>% t 
+colnames(PI_TPx_L00_df) <- c(date_cali) %>% as.character()
+
+CI_TPx_L00 <- apply(PI_TPx_L00_df, 2 ,quantile ,probs =c((PI_low/100),.5,(PI_high/100))) %>%
+  t %>% as.data.frame() %>% 
+  tibble::rownames_to_column(var="cale_date") %>% 
+  mutate(cale_date=ymd(cale_date)) %>% 
+  rename_at(vars(-cale_date),function(x) paste0("pred",x)) %>% 
+  left_join(CI_TPx_L00,.)
+
+# Renaming the column names
+colnames(CI_TPx_L00) <- c("cale_date", "cred_LowPI", "cred_Median", "cred_HighPI", "TPugL", "variable", "pred_LowPI", "pred_Median", "pred_HighPI")
+
+return(CI_TPx_L00)
+}
+
+## Test run
+C1testdf <- PI_func("C1")
+### Test for anomally
+anomaly.df1test <- C1testdf[which(C1testdf$`pred_LowPI`<C1testdf$`pred_LowPI`),]
+anomaly.df2test <- C1testdf[which(C1testdf$`cred_HighPI`>C1testdf$`pred_HighPI`),]
+
+# Segment wise TP calculation with 95% PI
+## Segment 1
+CI_TP1_L00 <- PI_func("C1", PI_low = 5, PI_high = 95)
+
+## Segment 2
+CI_TP2_L00 <- PI_func("C2", PI_low = 5, PI_high = 95)
+
+## Segment 3
+CI_TP3_L00 <- PI_func("C3", PI_low = 5, PI_high = 95)
+
+
+## Segment 4
+CI_TP4_L00 <- PI_func("C4", PI_low = 5, PI_high = 95)
+
+# Segment wise Sediment P calculation with PI
+## Segment 1
+CI_S1_L00 <- PI_func("S1", PI_low = 5, PI_high = 95)
+
+## Segment 2
+CI_S2_L00 <- PI_func("S2", PI_low = 5, PI_high = 95)
+
+## Segment 3
+CI_S3_L00 <- PI_func("S3", PI_low = 5, PI_high = 95)
+
+
+## Segment 4
+CI_S4_L00 <- PI_func("S4", PI_low = 5, PI_high = 95)
+
+
+```
+
+
+
+```{r}
+## Creating a combined dataset
+### Segment 1
+### TP
+TP_predDF1 <- CI_TP1_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C1", nrow(CI_TP1_L00))) %>% rename(., Date = cale_date)
+
+### Sediment P
+S_predDF1 <- CI_S1_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C1", nrow(CI_S1_L00)))%>% rename(., Date = cale_date)
+
+### Segment 2
+### TP
+TP_predDF2 <- CI_TP2_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C2", nrow(CI_TP2_L00)))%>% rename(., Date = cale_date)
+### Sediment P
+S_predDF2 <- CI_S2_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C2", nrow(CI_S2_L00)))%>% rename(., Date = cale_date)
+
+### Segment 3
+### TP
+TP_predDF3 <- CI_TP3_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C3", nrow(CI_TP3_L00)))%>% rename(., Date = cale_date)
+### Sediment P
+S_predDF3 <- CI_S3_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C3", nrow(CI_S3_L00)))%>% rename(., Date = cale_date)
+
+### Segment 4
+### TP
+TP_predDF4 <- CI_TP4_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C4", nrow(CI_TP4_L00)))%>% rename(., Date = cale_date)
+### Sediment P
+S_predDF4 <- CI_S4_L00[,c("cale_date","cred_Median", "pred_LowPI","pred_HighPI")] %>% mutate(Segment = rep("C4", nrow(CI_S4_L00)))%>% rename(., Date = cale_date)
+
+# Observed values
+outff_1 <- outff %>% mutate(Date = as.Date(paste0("1/",ym), format = "%d/%m/%Y"))
+
+outff_2 <- outff_1 %>% rename(., Segment = variable)
+outff_2 <- outff_2[,c(5,2:4)]
+
+Segment_names <- c(`C1` = "Segment \n 1",
+                   `C2` = "Segment \n 2",
+                   `C3` = "Segment \n 3",
+                   `C4` = "Segment \n 4")
+
+# R^2
+Seg1_R2 <- VarExp(outff[which(outff$variable=='C1'),"value"],outff[which(outff$variable=='C1'),"obs"])
+Seg2_R2 <- VarExp(outff[which(outff$variable=='C2'),"value"],outff[which(outff$variable=='C2'),"obs"])
+Seg3_R2 <- VarExp(outff[which(outff$variable=='C3'),"value"],outff[which(outff$variable=='C3'),"obs"])
+Seg4_R2 <- VarExp(outff[which(outff$variable=='C4'),"value"],outff[which(outff$variable=='C4'),"obs"])
+
+TP_R2_labels <- data.frame(Segment = c("C1", "C2", "C3", "C4"), R2 = sprintf("italic(R^2) == %.3f", as.numeric(c(Seg1_R2,Seg2_R2,Seg3_R2, Seg4_R2))))
+
+
+```
+
+Let us create a function to repeat the same task for each of the segments.
+
+```{r}
+# Function to plot the time series
+TPS_func <- function(A, S_df,sf1= 1,sf2 = 0, TP_df, Cx){
+  ## A -> Surface area in km^2
+  ## S_df -> df containing sediment P predictions
+  ## sf1 -> multiplicative scaling factor for secondary axis
+  ## sf2 -> additive scaling factor for secondary axis
+  ## TP_df -> df containing TP predictions
+  ## Cx -> Segment as C1, C2, C3 or C4
+  
+  Sx_area <- A 
+  S_dfx <- S_df
+  S_dfx[,c(2:4)] <- S_dfx[,c(2:4)]/(Sx_area*1000) # units in g/m^2
+  S_dfx[,c(2:4)] <- ((S_dfx[,c(2:4)])/sf1) + sf2
+  
+  ## To check with the plot results
+  S_dfy <- S_df
+  S_dfy[,c(2:4)] <- (S_dfy[,c(2:4)]/(Sx_area*1000)) # units in g/m^2
+  
+  # Plot
+  TPSx_plot <- ggplot()+
+  theme_bw()+
+  theme(legend.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text.align = 0,
+        text = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black")) +
+    # water TP 90% PI
+    geom_ribbon(data = TP_df, 
+                aes(x = Date, 
+                    ymin = `pred_LowPI`, 
+                    ymax = `pred_HighPI`, 
+                    fill = "90% PI"), 
+                alpha = 0.5,
+                show.legend = FALSE)+
+    # sediment TP 90%
+    geom_ribbon(data = S_dfx, 
+                aes(x = Date, 
+                    ymin = `pred_LowPI`, 
+                    ymax = `pred_HighPI`, 
+                    fill = "90% PI sed"), 
+                alpha = 0.5,
+                show.legend = FALSE)+
+    # Observed points
+    geom_point(data = outff_2[which(outff_2$Segment== Cx),], 
+               aes(x = Date, 
+                   y = obs, 
+                   color = "Observed"), 
+               size = 1, 
+               alpha = 0.5)+
+    # Predicted median line for water TP
+    geom_line(data = TP_df, 
+              aes(x = Date, 
+                  y = `cred_Median`, 
+                  color = "Predicted1"))+
+    # Predicted median line for sediment TP
+    geom_line(data = S_dfx, 
+              aes(x = Date, 
+                  y = `cred_Median`, 
+                  color = "Predicted2"), 
+              lty = 2)+
+    
+    # Plot design
+    scale_color_manual(values = c(`Observed` = "red",
+                                  `Predicted1` = "black",
+                                  `Predicted2` = "black"),
+                       label = c(expression(P["w,obs"]),
+                                 expression(P["w,pred"]),
+                                 expression(P["s,pred"])),
+                       guide = guide_legend(override.aes = 
+                                              list(size = c(2,0.5,0.5),
+                                                   shape = c(19,NA,NA),
+                                                   lty = c(NA,1,2),
+                                                   fill=c(NA, NA,NA))))+
+    scale_fill_manual(values = c(`90% PI` = "darkgrey",
+                                 `90% PI sed` = "cornsilk3"))+
+    scale_y_continuous(name = expression(TP[water]~"("*mu*g/L*")"),
+                       sec.axis = sec_axis(trans = ~((.-sf2)*sf1) ,
+                                           name = expression(atop(log(TP[sediments]),(g/m^2)))),
+                     expand = c(0, 0))+
+    scale_x_date(breaks = as.Date(c("1983-01-01", "1990-01-01", "2000-01-01", "2010-01-01", "2018-12-01")),date_labels = "%Y",
+                 expand = c(0, 0))+
+    theme(legend.position = "none",
+          axis.title = element_blank())
+  
+  return(list(TPSx_plot,S_dfy ))
+}
+
+## test run
+# TPS_plotx <- TPS_func(A = 11.94,
+#                       S_df = S_predDF1,
+#                       sf1 = 0.5,
+#                       sf2 = 400,
+#                       TP_df = TP_predDF1,
+#                       Cx = "C1")
+# 
+# TPS_plotx[[1]]
+```
+### Segment 1
+```{r}
+# Segment 1
+# Shape factors for secondary axes
+shp_fctr11 <- 0.20
+shp_fctr12 <- 0
+
+TPS1_plot <- TPS_func(A = 11.94, 
+                      S_df = S_predDF1,
+                      sf1 = shp_fctr11,
+                      sf2 = shp_fctr12,
+                      TP_df = TP_predDF1,
+                      Cx = "C1")
+TPS1_plot[[1]] <- TPS1_plot[[1]]+
+  theme(axis.text.x = element_blank())+
+        # axis.ticks.x = element_blank())+
+  scale_y_continuous(name = expression(TP[water]~"("*mu*g/L*")"),
+                       sec.axis = sec_axis(trans = ~((.-shp_fctr12)*shp_fctr11) ,
+                                           name = expression(atop(log(TP[sediments]),(g/m^2))),
+                     breaks = c(0,50,100,150)),
+                     breaks = c(0, 350, 700),
+                     limits = c(0,1000),
+                     expand = c(0, 0))+
+  annotate(geom = "text", 
+           x = as.Date("2018-01-01", format = "%Y-%m-%d"),
+           y = 900,
+           label = "1", hjust = 1, vjust = 0, size = 4)
+TPS1_plot[[1]]
+```
+
+
+### Segment 2
+```{r}
+# Segment 2
+# Shape factors for secondary axes
+shp_fctr21 <- 0.5
+shp_fctr22 <- 0
+
+TPS2_plot <- TPS_func(A = 12.92, 
+                      S_df = S_predDF2,
+                      sf1 = shp_fctr21,
+                      sf2 = shp_fctr22,
+                      TP_df = TP_predDF2,
+                      Cx = "C2")
+TPS2_plot[[1]] <- TPS2_plot[[1]]+
+  theme(axis.text.x = element_blank())+
+        # axis.ticks.x = element_blank())+
+  scale_y_continuous(name = expression(TP[water]~"("*mu*g/L*")"),
+                       sec.axis = sec_axis(trans = ~((.-shp_fctr22)*shp_fctr21) ,
+                                           name = expression(atop(log(TP[sediments]),(g/m^2))),
+                     breaks = c(0,50,100,150,200, 250, 300, 350)),
+                     breaks = c(0, 100, 200, 300),
+                     limits = c(0,325),
+                     expand = c(0, 0))+
+  annotate(geom = "text", x = as.Date("2018-01-01", format = "%Y-%m-%d"), y = 280,
+           label = "2", hjust = 1, vjust = 0, size = 4)
+TPS2_plot[[1]]
+```
+### Segment 3
+```{r}
+# Segment 3
+# Shape factors for secondary axes
+shp_fctr31 <- 0.5
+shp_fctr32 <- 0
+
+TPS3_plot <- TPS_func(A = 17.28, 
+                      S_df = S_predDF3,
+                      sf1 = shp_fctr31,
+                      sf2 = shp_fctr32,
+                      TP_df = TP_predDF3,
+                      Cx = "C3")
+TPS3_plot[[1]] <- TPS3_plot[[1]]+
+  theme(axis.text.x = element_blank())+
+        # axis.ticks.x = element_blank())+
+  scale_y_continuous(name = expression(TP[water]~"("*mu*g/L*")"),
+                       sec.axis = sec_axis(trans = ~((.-shp_fctr32)*shp_fctr31) ,
+                                           name = expression(atop(log(TP[sediments]),(g/m^2))),
+                     breaks = c(0,50,100,150,200, 250, 300, 350)),
+                     breaks = c(0, 100, 200, 300),
+                     limits = c(0,325),
+                     expand = c(0, 0))+
+  annotate(geom = "text", x = as.Date("2018-01-01", format = "%Y-%m-%d"), y = 280,
+           label = "3", hjust = 1, vjust = 0, size = 4)
+TPS3_plot[[1]]
+```
+
+### Segment 4
+```{r}
+# Segment 4
+# Shape factors for secondary axes
+shp_fctr41 <- 0.5
+shp_fctr42 <- 0
+
+TPS4_plot <- TPS_func(A = 6.057, 
+                      S_df = S_predDF4,
+                      sf1 = shp_fctr41,
+                      sf2 = shp_fctr42,
+                      TP_df = TP_predDF4,
+                      Cx = "C4")
+
+TPS4_plot[[1]] <- TPS4_plot[[1]]+
+  scale_y_continuous(name = expression(TP[water]~"("*mu*g/L*")"),
+                       sec.axis = sec_axis(trans = ~((.-shp_fctr42)*shp_fctr41) ,
+                                           name = expression(atop(log(TP[sediments]),(g/m^2))),
+                     breaks = c(0,100,200,300)),
+                     breaks = c(0, 200, 400),
+                     limits = c(0,600),
+                     expand = c(0, 0))+
+    theme(legend.position = c(0.3,0.9),
+          legend.background = element_blank(),
+          legend.key = element_blank(),
+        legend.title = element_blank(),
+        legend.direction = "horizontal",
+        # legend.background = element_rect(fill="transparent",
+                                  # size=0.5, linetype="blank"),
+        legend.text = element_text(size = 10),
+        axis.text.x = element_text(vjust = -1))+
+  annotate(geom = "text", x = as.Date("2018-01-01", format = "%Y-%m-%d"), y = 520,
+           label = "4", hjust = 1, vjust = 0, size = 4)
+
+TPS4_plot[[1]]
+```
+
+
+### All plots together
+```{r}
+# Approach 1
+
+# Remove axis titles from all plots
+TPS_plots <- list(
+  TPS1_plot[[1]],
+  TPS2_plot[[1]],
+  TPS3_plot[[1]],
+  TPS4_plot[[1]]) %>%
+  map(~.x + labs(x=NULL, y=NULL))
+# 
+# gridtext
+yleft <- textGrob(expression(P[w]~"("*mu*g/L*")"),
+                  rot = 90, gp = gpar(fontsize = 10))
+
+yright <- textGrob(expression(P[s]~(g/m^2)),
+                   rot = 270, gp = gpar(fontsize = 10))
+
+bottom <- textGrob("Years", gp = gpar(fontsize = 10, col="black"))
+# 
+# # Lay out plots
+# TPS_plot_all <- grid.arrange(grobs=TPS_plots, ncol = 1, nrow = 4, 
+#                     right = yright, left = yleft, bottom = bottom)
+
+# tiff(file="OutputFiles/JLPMv016_TPS_all.png",height=8,width=8,units='in',res=600)
+# TPS_plot_all
+# dev.off()
+
+# ggsave("OutputFiles/JLPMv016_TPS_all.tiff",TPS_plot_all,
+#        height=6,width=10,units='in',dpi=600)
+
+# Approach 2
+TPS_plot_all2 <- { wrap_elements(yleft) + 
+    {{TPS_plots[[1]] / TPS_plots[[2]] / TPS_plots[[3]] / TPS_plots[[4]]}}  + 
+    wrap_elements(yright) +
+    plot_layout(widths=c(1,16,1)) } / 
+  bottom + 
+  plot_layout(heights=c(98,4))
+
+TPS_plot_all2
+
+# Saving the plot
+# ggsave("OutputFiles/JLPMv016_allTPS.png",TPS_plot_all2,
+#        height=8,width=6,units='in',dpi=1200)
+# dev.off()
+```
+
+While the figure here is not clear, the saved file in tiff or png is completely clear and can be view in the *Figures* folder.
+
+### Percentage of observed TP within prediction interval
+Let us quickly estimate the percentage of TP that lie within the prediction interval.
+```{r PercentObsTPinPredInt, echo=TRUE, message=FALSE, warning=FALSE}
+# Combining TP_predDF1, TP_predDF2, TP_predDF3, and TP_predDF4
+TP_predDF <- rbind(TP_predDF1, TP_predDF2) %>% 
+  rbind(., TP_predDF3) %>%
+  rbind(., TP_predDF4)
+
+# Arranging the data frame by date
+TP_predDF <- TP_predDF[order(TP_predDF$Date),]
+
+# Creating another object to store the observed data
+TP_obsDF <- Pobs %>% rename(., Date = cale_date, Segment = variable)
+
+# Merging predicted TP data frame with observed TP data frame
+TP_predDF <- merge(TP_predDF, TP_obsDF, by = c("Date", "Segment"), all.x = T)
+
+# Total number of observed data
+NobsP <- length(TP_obsDF$TPugL)
+
+# data frame of observed data within 90 prediction interval
+N90predPdf <- TP_predDF %>% drop_na() %>% .[which(.$`pred_LowPI`<= .$TPugL & .$`pred_HighPI` >= .$TPugL),] 
+
+# Total number of observed data within 90% prediction interval
+N90predP <- nrow(N90predPdf)
+
+# Creating a dataframe to summarize the results segment-wise
+N90predPpertDF <- data.frame(Segment = c("C1", "C2","C3", "C4", "All"),
+                             ObsN = c(nrow(TP_obsDF[which(TP_obsDF$Segment=="C1"),]),
+                                      nrow(TP_obsDF[which(TP_obsDF$Segment=="C2"),]),
+                                      nrow(TP_obsDF[which(TP_obsDF$Segment=="C3"),]),
+                                      nrow(TP_obsDF[which(TP_obsDF$Segment=="C4"),]),
+                                      nrow(TP_obsDF)),
+                             PredN = c(nrow(N90predPdf[which(N90predPdf$Segment=="C1"),]),
+                                       nrow(N90predPdf[which(N90predPdf$Segment=="C2"),]),
+                                       nrow(N90predPdf[which(N90predPdf$Segment=="C3"),]),
+                                       nrow(N90predPdf[which(N90predPdf$Segment=="C4"),]),
+                                       nrow(N90predPdf))) %>%
+  mutate(PertPinPI = (PredN/ObsN)*100)
+
+# Presenting the data
+N90predPpertDF
+
+```
+
+
+
+### Sediment P only
+Although we have plotted the TP concentration in water and sediment columns in the above figures, we need to visualize these concentrations separately for each column, especially for sediment column, to see how the trends have actually changed. So, let us quickly plot the TP content in the sediment columns next. We just plot the median values here.
+
+```{r sed P 1, echo=TRUE, message=FALSE, warning=FALSE}
+# Changing the data from Mass to Concentration
+S_predDF1C <- S_predDF1 %>% mutate_at(c("cred_Median", "pred_LowPI", "pred_HighPI"), function(x)(x/(11.94*1000)))
+
+# ploting the sediment P concentration in Segment 1
+plot_basics + 
+  geom_line(data = S_predDF1C, 
+            aes(x = Date, y = `cred_Median`))+
+  # geom_ribbon(data = S_predDF1C,
+  #             aes(x = Date,
+  #                 ymin = `pred_LowPI`,
+  #                 ymax = `pred_HighPI`),
+  #             fill = "grey",
+  #             alpha = 0.5,
+  #             show.legend = FALSE)+
+  labs(subtitle = "Segment 1",
+       x = "Year",
+       y = expression(TP~"in"~sediments~(g/m^2)))
+```
+
+```{r sed P 2, echo=TRUE, message=FALSE, warning=FALSE}
+# Changing the data from Mass to Concentration
+S_predDF2C <- S_predDF2 %>% mutate_at(c("cred_Median", "pred_LowPI", "pred_HighPI"), function(x)(x/(12.92*1000)))
+
+# ploting the sediment P concentration in Segment 2
+plot_basics + 
+  geom_line(data = S_predDF2C, 
+            aes(x = Date, y = `cred_Median`))+
+  # geom_ribbon(data = S_predDF2C,
+  #             aes(x = Date,
+  #                 ymin = `pred_LowPI`,
+  #                 ymax = `pred_HighPI`),
+  #             fill = "grey",
+  #             alpha = 0.5,
+  #             show.legend = FALSE)+
+  labs(subtitle = "Segment 2",
+       x = "Year",
+       y = expression(TP~"in"~sediments~(g/m^2)))
+```
+
+```{r sed P 3, echo=TRUE, message=FALSE, warning=FALSE}
+# Changing the data from Mass to Concentration
+S_predDF3C <- S_predDF3 %>% mutate_at(c("cred_Median", "pred_LowPI", "pred_HighPI"), function(x)(x/(17.28*1000)))
+
+# ploting the sediment P concentration in Segment 3
+plot_basics + 
+  geom_line(data = S_predDF3C, 
+            aes(x = Date, y = `cred_Median`))+
+  # geom_ribbon(data = S_predDF3C,
+  #             aes(x = Date,
+  #                 ymin = `pred_LowPI`,
+  #                 ymax = `pred_HighPI`),
+  #             fill = "grey",
+  #             alpha = 0.5,
+  #             show.legend = FALSE)+
+  labs(subtitle = "Segment 3",
+       x = "Year",
+       y = expression(TP~"in"~sediments~(g/m^2)))
+```
+
+```{r sed P 4, echo=TRUE, message=FALSE, warning=FALSE}
+# Changing the data from Mass to Concentration
+S_predDF4C <- S_predDF4 %>% mutate_at(c("cred_Median", "pred_LowPI", "pred_HighPI"), function(x)(x/(6.057*1000)))
+
+# ploting the sediment P concentration in Segment 4
+plot_basics + 
+  geom_line(data = S_predDF4C, 
+            aes(x = Date, y = `cred_Median`))+
+  # geom_ribbon(data = S_predDF4C,
+  #             aes(x = Date,
+  #                 ymin = `pred_LowPI`,
+  #                 ymax = `pred_HighPI`),
+  #             fill = "grey",
+  #             alpha = 0.5,
+  #             show.legend = FALSE)+
+  labs(subtitle = "Segment 4",
+       x = "Year",
+       y = expression(TP~"in"~sediments~(g/m^2)))
+```
+
+Let us create a table to see the minimum and maximum of median sediment P in each segment:
+
+|Segment|Min sed P (g/m^2^/mo)|Max sed P (g/m^2^/mo)|
+|:-------|:---------------------|:---------------------|
+|1|`r min(S_predDF1[,2]/(11.94*1000))`|`r max(S_predDF1[,2]/(11.94*1000))`|
+|2|`r min(S_predDF2[,2]/(12.92*1000))`|`r max(S_predDF2[,2]/(12.92*1000))`|
+|3|`r min(S_predDF3[,2]/(17.28*1000))`|`r max(S_predDF3[,2]/(17.28*1000))`|
+|4|`r min(S_predDF4[,2]/(6.057*1000))`|`r max(S_predDF4[,2]/(6.057*1000))`|
+
+Now, let us look into some of the features observed in the sediment TP trends.
+```{r sedP trends facts1, echo=TRUE, message=FALSE, warning=FALSE}
+# Calculating the annual average of sediment TP
+S_predDFann <- data.frame(Date = S_predDF1C$Date,
+                          year = year(S_predDF1C$Date),
+                          S1 = S_predDF1C$`cred_Median`,
+                          S2 = S_predDF2C$`cred_Median`,
+                          S3 = S_predDF3C$`cred_Median`,
+                          S4 = S_predDF4C$`cred_Median`) %>%
+  group_by(year) %>%
+  summarise_at(., .vars = c("S1", "S2", "S3", "S4"), .funs = mean)
+
+print(S_predDFann)
+```
+
+As sediment TP constantly decreases in segments 2 and 3, we can easily estimate the percentage reduction in these segments during the study period:
+
+In Segment 2, Percentage reduction in TP = `r sprintf("%0.2f", ((S_predDFann[1, "S2"] - S_predDFann[nrow(S_predDFann), "S2"])/S_predDFann[1, "S2"])*100)` % 
+
+In Segment 3, Percentage reduction in TP = `r sprintf("%0.2f", ((S_predDFann[1, "S3"] - S_predDFann[nrow(S_predDFann), "S3"])/S_predDFann[1, "S3"])*100)` % 
+
+In the other segments, the sediment TP increased and then decreased following the trends of external P loading (see the mass flow plot below). As these segments receive most of the tributaries, their response to external loading is most pronounced.
+
+In segment 1, sediment TP increased by `r sprintf("%0.2f", ((S_predDFann[9, "S1"] - S_predDFann[1, "S1"])/S_predDFann[1, "S1"])*100)` % till 1991 and then started decreasing, a `r sprintf("%0.2f", ((S_predDFann[9, "S1"] - S_predDFann[nrow(S_predDFann), "S1"])/S_predDFann[9, "S1"])*100)` % drop from 1992 to 2018.
+
+In segment 4, sediment TP increased by `r sprintf("%0.2f", ((S_predDFann[18, "S4"] - S_predDFann[1, "S4"])/S_predDFann[1, "S4"])*100)` % till 2000 and then started decreasing, a `r sprintf("%0.2f", ((S_predDFann[18, "S4"] - S_predDFann[nrow(S_predDFann), "S4"])/S_predDFann[18, "S4"])*100)` % drop from 2001 to 2018.
+
+Now let us see the decadal variation of sediment P in Jordan Lake.
+
+```{r sed P decadal variation, echo=TRUE, message=FALSE, warning=FALSE}
+# Overall sediment P concentration in Jordan Lake
+S_predDFC <- PI_func("Sconc") %>% select(.,c("cale_date","cred_Median"))%>% 
+  rename(., Date = cale_date, Median = `cred_Median`)
+
+# Ploting the overall trend
+plot_basics + 
+  geom_line(data = S_predDFC, 
+            aes(x = Date, y = Median))+
+  labs(subtitle = "Jordan Lake",
+       x = "Year",
+       y = expression(TP~"in"~sediments~(g/m^2)))
+
+# Calculating the decadal average
+S_predDFC <- S_predDFC %>% mutate(Year = year(Date),
+                                  Decade = ifelse(Year<=1992, "fdecade",ifelse(Year>=2009, "ldecade", NA))) %>% drop_na()
+
+S_predDFCdec <- S_predDFC %>% group_by(Decade) %>%
+  summarise(Savg = mean(Median))
+
+```
+
+
+Thus, sediment TP in Jordan Lake decreased by `r sprintf("%0.2f", ((S_predDFCdec[1,"Savg"]-S_predDFCdec[2,"Savg"])/S_predDFCdec[1,"Savg"])*100)` %
+
+# Mass transfer plot
+The annual inflow and outflow of P across the water column is shown in the plot below.
+```{r Mass transfer plot, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a new data frame to create mass transfer plot
+MT_df <- MassFlows %>%
+  transmute(t = t,
+            Year = year,
+            P_inflow = Seg1in+Seg2in+Seg3in+Seg4in,
+            P_recycle = S1res+S2res+S3res+S4res,
+            P_outflow = outflow,
+            P_settle = S1set+S2set+S3set+S4set,
+            P_burial = S1Bur+S2Bur+S3Bur+S4Bur,
+            P_water = M1 + M2 + M3 + M4) %>% group_by(Year) %>%
+  summarise_at(vars(P_inflow:P_water),
+               funs(sum)) %>%
+  mutate(err = P_inflow+P_recycle-P_outflow-P_settle)
+
+# Changing all the values into metric tons
+MT_df[,2:8] <- MT_df[,2:8]/1000
+## Making all outgoing terms negative
+MT_df$P_outflow <- -MT_df$P_outflow
+MT_df$P_settle <- -MT_df$P_settle
+MT_df$P_burial <- -MT_df$P_burial
+MT_df1 <- MT_df[,1:6]
+# Adjust P_settle to make P_burial look part of P_settle
+MT_df1$P_settle <- MT_df1$P_settle - MT_df1$P_burial
+
+# gathering the data
+MT_df_gat <- cbind(MT_df1[1], stack(MT_df1[2:6]))
+
+MT_df_gat$ind <- factor(MT_df_gat$ind, levels = c("P_inflow","P_recycle", "P_outflow","P_burial","P_settle" ))
+
+# Yearly flow into the reservoir
+Flow_ann <- RoutMOdin[,c("year", "Q1in", "Q2in", "Q3in", "Q4in")]%>%
+  mutate(Q_ann = Q1in+Q2in+Q3in+Q4in) %>% group_by(year) %>%
+  summarise(Q_ann = sum(Q_ann))
+Flow_ann$Q_ann1 <- (Flow_ann$Q_ann)/10-1200
+
+# stacked plot
+
+TP_MassTransfer <- ggplot(data = MT_df_gat)+
+  # P control measure
+  # geom_rect(aes(xmin = 2009, xmax = 2018, ymin = -Inf, ymax = Inf),fill = "grey", alpha = 0.01)+ # Jordan Lake rules (Partial adoption)
+  geom_col(aes(x = Year, y = values, fill = ind), position = "stack", width = 0.75)+
+  scale_fill_manual("",values=c("orange red","orange","skyblue4", "seagreen3", "seagreen2"),
+                    label = c(expression(P[external]), expression(P[internal]), expression(P[outflow]), expression(P[burial]), expression(P[settle])))+
+  labs(x = "Year")+
+  scale_x_continuous(breaks = c(1983, 1990, 2000, 2010, 2018))+
+  # Major hurricanes in North Carolina
+  # geom_vline(xintercept = 1984, lty = 2, alpha = 0.5)+ # Hurricane Diana
+  # geom_vline(xintercept = 1989, lty = 2, alpha = 0.5)+ # Hurricane Hugo
+  # geom_vline(xintercept = 1996, lty = 2, alpha = 0.5)+ # Hurricane Fran
+  # geom_vline(xintercept = 1999, lty = 2, alpha = 0.5)+ # Hurricane Flyod
+  # geom_vline(xintercept = 2016, lty = 2, alpha = 0.5)+ # Hurricane Mathew
+  # geom_vline(xintercept = 2018, lty = 2, alpha = 0.5)+ # Hurricane Florence
+  # # Phosphorus control measures
+  # geom_vline(xintercept = 1988, lty = 1, alpha = 0.5) # P ban in laundry detergent
+  # geom_point(data = Flow_ann, aes(x = year, y = Q_ann))+
+  geom_line(data = Flow_ann, aes(x = year, y = Q_ann1))+
+  scale_y_continuous(name = expression(atop(Mass~transfer,rate~of~P~(MT/year))),
+                     sec.axis = sec_axis(trans = ~(.+1200)*10, name = expression(atop(Inflow,(Mm^3/year))), breaks = c(0,1500, 3000)),
+                     breaks = c(-500,0,500))+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 0.5,
+        legend.text.align = 0,
+        legend.direction = "horizontal",
+        # legend.position = c(0.5,0.1),
+        legend.position = "bottom",
+        text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_line(color = "black"),
+        axis.title.y = element_text(hjust = 1.00),
+        panel.background = element_rect(fill = "transparent"), 
+        plot.background = element_rect(fill = "transparent", color = NA),
+        legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent", color = NA),
+        legend.key = element_rect(fill = "transparent", colour = NA))
+  
+
+
+
+
+
+TP_MassTransfer
+
+# png(file="OutputFiles/JLPMv016_MassTransfer.png",height=4,width=6,units='in',res=1200)
+# # tiff(file="OutputFiles/JLPMv016_MassTransfer.tiff",height=4,width=6,units='in',res=1200)
+# TP_MassTransfer
+# dev.off()
+```
+Let us also plot the mass transfer plot by months:
+```{r Monthly Mass Transfer, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a new data frame to create mass transfer plot
+MT_df_mo <- MassFlows %>%
+  transmute(t = t,
+            Date = Date,
+            Year = year,
+            P_inflow = Seg1in+Seg2in+Seg3in+Seg4in,
+            P_recycle = S1res+S2res+S3res+S4res,
+            P_outflow = outflow,
+            P_settle = S1set+S2set+S3set+S4set,
+            P_burial = S1Bur+S2Bur+S3Bur+S4Bur,
+            P_water = M1 + M2 + M3 + M4)
+
+MT_df_mo$Date <- as.Date(MT_df_mo$Date, format = "%m/%d/%Y")
+
+MT_df_mo <- MT_df_mo %>% mutate(mo = month(Date)) %>% group_by(mo) %>%
+  summarise_at(vars(P_inflow:P_water),
+               funs(mean))
+
+# Changing all the values into metric tons
+MT_df_mo[,2:7] <- MT_df_mo[,2:7]/1000
+
+## Making all outgoing terms negative
+MT_df_mo$P_outflow <- -MT_df_mo$P_outflow
+MT_df_mo$P_settle <- -MT_df_mo$P_settle
+MT_df_mo$P_burial <- -MT_df_mo$P_burial
+MT_df_mo <- MT_df_mo[,1:6]
+
+# Adjust P_settle to make P_burial look part of P_settle
+MT_df_mo$P_settle <- MT_df_mo$P_settle - MT_df_mo$P_burial
+
+# gathering the data
+MT_df_gat_mo <- cbind(MT_df_mo[1], stack(MT_df_mo[2:6]))
+
+MT_df_gat_mo$ind <- factor(MT_df_gat_mo$ind, levels = c("P_inflow","P_recycle", "P_outflow","P_burial","P_settle" ))
+
+# Plotting the results
+TP_MassTransfer_mo <- ggplot(data = MT_df_gat_mo)+
+  geom_col(aes(x = mo, y = values, fill = ind), position = "stack", width = 0.75)+
+  scale_fill_manual("",values=c("orange red","orange","skyblue4", "seagreen3", "seagreen2"),
+                    label = c(expression(P[external]), expression(P[internal]), expression(P[outflow]), expression(P[burial]), expression(P[settle])))+
+  labs(x = "",
+       y = expression(atop(Mass~transfer,rate~of~P~(MT/year))))+
+  scale_x_continuous(breaks = seq(1,12),
+                     labels = month.abb)+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 0.5,
+        legend.text.align = 0,
+        legend.direction = "horizontal",
+        # legend.position = c(0.5,0.1),
+        legend.position = "bottom",
+        text = element_text(size = 10),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color="black"),
+        axis.ticks = element_line(size = 10, color = "black"))
+        # panel.background = element_rect(fill = "transparent"), 
+        # plot.background = element_rect(fill = "transparent", color = NA),
+        # legend.background = element_rect(fill = "transparent"),
+        # legend.box.background = element_rect(fill = "transparent", color = NA),
+        # legend.key = element_rect(fill = "transparent", colour = NA))
+
+TP_MassTransfer_mo
+
+# Saving the plot
+# png(file="OutputFiles/JLPMv016_MassTransfer_mo.png",height=4,width=6,units='in',res=1200)
+# # tiff(file="OutputFiles/JLPMv016_MassTransfer_mo.tiff",height=4,width=6,units='in',res=1200)
+# TP_MassTransfer_mo
+# dev.off()
+```
+```{r Seasonal Mass plot, echo=TRUE, message=FALSE, warning=FALSE}
+# Let us add seasons to the monthly mass transfer plot
+MT_df_mos <- MT_df_mo %>% mutate(Season = c('Winter','Winter', 'Winter', 'Spring', 'Spring', 'Spring', 'Summer', 'Summer', 'Summer', 'Fall', 'Fall', 'Fall'))
+
+# Seasonal Mass transfer plot
+MT_df_mos <- MT_df_mos %>%
+  group_by(Season) %>%
+  summarise_at(vars(P_inflow:P_burial),
+               funs(mean))
+# Relative contribution of P loads
+MT_df_mos <- MT_df_mos %>%
+  mutate(P_inflow_f = P_inflow/(P_inflow+P_recycle),
+         P_recycle_f = P_recycle/(P_inflow+P_recycle))
+
+# Printing the results
+kableExtra::kable(head(MT_df_mos), "pipe")
+```
+
+
+
+If we divide the study period into 3 periods: period 1 (1983 – 1994), period 2 (1995 – 2006), and period 3 (2007 – 2018), let us see how the average external and internal P loading has changed.
+```{r MassFlow Stats, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a df to store mean P load in the first and last decade
+MTstat_df <- MT_df %>% 
+  mutate(Period = ifelse(Year<=1994, 
+                         "period1",
+                         ifelse(Year>=1995 & Year<=2006, 
+                                "period2",
+                                ifelse(Year>=2007 & Year<=2018, 
+                                "period3", NA)))) %>% 
+  drop_na() 
+
+# Removing negative value
+MTstat_df[,c(2:7)] <- abs(MTstat_df[,2:7])
+
+# Calculating the average ratio of internal and external P load to 
+# total P load
+MTstat_df <- MTstat_df %>% 
+  mutate(
+    # total load
+    Pin = P_inflow+P_recycle, 
+    #  P ratio of external P to total
+    P_inflowfrac = P_inflow/Pin,
+    # P ratio of internal P to total
+    P_recyclefrac = P_recycle/Pin) %>%
+  group_by(Period) %>% summarise_at(.vars = c("P_inflow", "P_recycle", "P_outflow", "P_settle", "P_burial", "Pin", "P_inflowfrac", "P_recyclefrac"), .funs = mean)
+
+# showing the data
+knitr::kable(head(MTstat_df), "pipe")
+```
+About `r sprintf("%0.2f", mean(c(265.79,217.91,215.74)))` MT TP per year also settled down into the sediment layer 
+
+Let us how much P originally entered the reservoir before being shunted in the upstream tributary arms:
+```{r}
+# Removing the the shunting effect
+MTstat_df_wo_sh <- MTstat_df %>% mutate(Ori_P_inflow = P_inflow/(1-as.numeric(output_prm["Sh"])))
+
+# showing the data
+knitr::kable(head(MTstat_df_wo_sh), "pipe")
+```
+
+
+Let us also see how the trends change from the first decade of study period to the last decade of the study period.
+
+```{r MassFlow Stats1, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a df to store mean P load in the first and last decade
+MTstat_df1 <- MT_df %>% 
+  mutate(decade = ifelse(Year<=1992, 
+                         "decade1",
+                         ifelse(Year>=2009 & Year<=2018, 
+                                "decade2",
+                                NA))) %>% 
+  drop_na() 
+
+# Removing negative value
+MTstat_df1[,c(2:7)] <- abs(MTstat_df1[,2:7])
+
+# Calculating the average ratio of internal and external P load to 
+# total P load
+MTstat_df1 <- MTstat_df1 %>% 
+  mutate(
+    # total load
+    Pin = P_inflow+P_recycle, 
+    #  P ratio of external P to total
+    P_inflowfrac = P_inflow/Pin,
+    # P ratio of internal P to total
+    P_recyclefrac = P_recycle/Pin) %>%
+  group_by(decade) %>% summarise_at(.vars = c("P_inflow", "P_recycle", "P_outflow", "P_settle", "P_burial", "Pin", "P_inflowfrac", "P_recyclefrac"), .funs = mean)
+
+# showing the data
+knitr::kable(head(MTstat_df1), "pipe")
+```
+
+The average internal P load in Jordan Lake is `r sprintf("%0.2f", mean(MT_df$P_recycle))` MT/year.
+The average burial rate in Jordan Lake is `r sprintf("%0.2f", abs(mean(MT_df$P_burial)))` MT/year.
+
+### Alternate Mass transfer plot (No burial column)
+```{r Mass transfer plot New1, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a new data frame to create mass transfer plot (NB mean no burial data)
+MT_df_NB <- MassFlows %>%
+  transmute(t = t,
+            Year = year,
+            P_inflow = Seg1in+Seg2in+Seg3in+Seg4in,
+            P_recycle = S1res+S2res+S3res+S4res,
+            P_outflow = outflow,
+            P_settle = S1set+S2set+S3set+S4set,
+            P_burial = S1Bur+S2Bur+S3Bur+S4Bur,
+            P_water = M1 + M2 + M3 + M4) %>% group_by(Year) %>%
+  summarise_at(vars(P_inflow:P_water),
+               funs(sum)) %>%
+  mutate(err = P_inflow+P_recycle-P_outflow-P_settle)
+
+# Changing all the values into metric tons
+MT_df_NB[,2:8] <- MT_df_NB[,2:8]/1000
+## Making all outgoing terms negative
+MT_df_NB$P_outflow <- -MT_df_NB$P_outflow
+MT_df_NB$P_settle <- -MT_df_NB$P_settle
+MT_df_NB$P_burial <- -MT_df_NB$P_burial
+MT_df_NB1 <- MT_df_NB[,1:6]
+
+# Adjust P_settle to make P_burial look part of P_settle
+# MT_df_NB1$P_settle <- MT_df_NB1$P_settle - MT_df_NB1$P_burial
+
+# gathering the data
+MT_df_NB_gat <- cbind(MT_df_NB1[1], stack(MT_df_NB1[2:6]))
+
+MT_df_NB_gat$ind <- factor(MT_df_NB_gat$ind, levels = c("P_inflow","P_recycle","P_burial", "P_outflow","P_settle" ))
+
+# Yearly flow into the reservoir
+Flow_ann <- RoutMOdin[,c("year", "Q1in", "Q2in", "Q3in", "Q4in")]%>%
+  mutate(Q_ann = Q1in+Q2in+Q3in+Q4in) %>% group_by(year) %>%
+  summarise(Q_ann = sum(Q_ann))
+Flow_ann$Q_ann1 <- (Flow_ann$Q_ann)/10-1200
+
+# stacked plot
+
+TP_MassTransfer_NB <- ggplot()+
+  geom_col(data = MT_df_NB_gat, aes(x = Year, y = values, fill = ind), position = "stack", width = 0.75)+
+  scale_fill_manual("",values=c("orange red","orange","transparent","skyblue4", "seagreen2"),
+                    label = c(expression(P[external]), expression(P[internal]),"", expression(P[outflow]),expression(P[settle])))+
+  labs(x = "Year")+
+  scale_x_continuous(breaks = c(1983, 1990, 2000, 2010, 2018))+
+  # geom_point(data = Flow_ann, aes(x = year, y = Q_ann))+
+  geom_point(data = MT_df_NB1, aes(x = Year, y = P_burial), shape = 20, size = 0.8)+
+    # geom_line(data = MT_df_NB1, aes(x = Year, y = P_burial), color = 'darkgray')+
+  geom_line(data = Flow_ann, aes(x = year, y = Q_ann1))+
+  scale_y_continuous(name = expression(atop(Mass~transfer,rate~of~P~(MT/year))),
+                     sec.axis = sec_axis(trans = ~(.+1200)*10, name = expression(atop(Inflow,(Mm^3/year))), breaks = c(0,1500, 3000, 4500)),
+                     breaks = c(-500,0,500))+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 0.5,
+        legend.text.align = 0,
+        legend.direction = "horizontal",
+        legend.position = "bottom",
+        text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        axis.text = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_line(color = "black"),
+        axis.title.y.left = element_text(hjust = 0.75),
+        axis.title.y.right = element_text(hjust = 1),
+        panel.background = element_rect(fill = "transparent"), 
+        plot.background = element_rect(fill = "transparent", color = NA),
+        legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent", color = NA),
+        legend.key = element_rect(fill = "transparent", colour = NA))
+  
+
+
+
+
+
+TP_MassTransfer_NB
+
+# saving the plot
+# png(file="OutputFiles/JLPMv016_MassTransfer_NB.png",height=4,width=6,units='in',res=1200)
+# TP_MassTransfer_NB
+# dev.off()
+
+```
+# Monthly mass transfer plot
+```{r Monthly Mass Transfer New, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a new data frame to create mass transfer plot
+MT_df_mo_NB <- MassFlows %>%
+  transmute(t = t,
+            Date = Date,
+            Year = year,
+            P_inflow = Seg1in+Seg2in+Seg3in+Seg4in,
+            P_recycle = S1res+S2res+S3res+S4res,
+            P_outflow = outflow,
+            P_settle = S1set+S2set+S3set+S4set,
+            P_burial = S1Bur+S2Bur+S3Bur+S4Bur,
+            P_water = M1 + M2 + M3 + M4)
+
+MT_df_mo_NB$Date <- as.Date(MT_df_mo_NB$Date, format = "%m/%d/%Y")
+
+MT_df_mo_NB <- MT_df_mo_NB %>% mutate(mo = month(Date)) %>% group_by(mo) %>%
+  summarise_at(vars(P_inflow:P_water),
+               funs(mean))
+
+# Changing all the values into metric tons
+MT_df_mo_NB[,2:7] <- MT_df_mo_NB[,2:7]/1000
+
+## Making all outgoing terms negative
+MT_df_mo_NB$P_outflow <- -MT_df_mo_NB$P_outflow
+MT_df_mo_NB$P_settle <- -MT_df_mo_NB$P_settle
+MT_df_mo_NB$P_burial <- -MT_df_mo_NB$P_burial
+MT_df_mo_NB <- MT_df_mo_NB[,1:6]
+
+# Adjust P_settle to make P_burial look part of P_settle
+MT_df_mo_NB$P_settle <- MT_df_mo_NB$P_settle - MT_df_mo_NB$P_burial
+
+# gathering the data
+MT_df_gat_mo_NB <- cbind(MT_df_mo_NB[1], stack(MT_df_mo_NB[2:6]))
+
+MT_df_gat_mo_NB$ind <- factor(MT_df_gat_mo_NB$ind, levels = c("P_inflow","P_recycle","P_burial", "P_outflow","P_settle" ))
+
+# Plotting the results
+TP_MassTransfer_mo_NB <- ggplot(data = MT_df_gat_mo_NB)+
+  geom_col(aes(x = mo, y = values, fill = ind), position = "stack", width = 0.75)+
+  scale_fill_manual("",values=c("orange red","orange", "transparent","skyblue4", "seagreen2"),
+                    label = c(expression(P[external]), expression(P[internal]),"",expression(P[outflow]), expression(P[settle])))+
+  labs(x = "",
+       y = expression(atop(Mass~transfer,rate~of~P~(MT/year))))+
+  scale_x_continuous(breaks = seq(1,12),
+                     labels = month.abb)+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 0.5,
+        legend.text.align = 0,
+        legend.direction = "horizontal",
+        # legend.position = c(0.5,0.1),
+        legend.position = "bottom",
+        text = element_text(size = 10),
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color="black"),
+        axis.ticks = element_line(color = "black"),
+        legend.text = element_text(size = 10, color="black"))
+        # panel.background = element_rect(fill = "transparent"), 
+        # plot.background = element_rect(fill = "transparent", color = NA),
+        # legend.background = element_rect(fill = "transparent"),
+        # legend.box.background = element_rect(fill = "transparent", color = NA),
+        # legend.key = element_rect(fill = "transparent", colour = NA))
+
+TP_MassTransfer_mo_NB
+
+# Saving the plot
+# png(file="OutputFiles/JLPMv016_MassTransfer_mo_NB.png",height=4,width=6,units='in',res=1200)
+# TP_MassTransfer_mo_NB
+# dev.off()
+```
+
+
+# Mass transfer plot for internal and external loading
+```{r Monthly Mass Transfer New part 1, echo=TRUE, message=FALSE, warning=FALSE}
+# Creating a new data frame to create mass transfer plot
+MT_df_mo_NB1 <- MassFlows %>%
+  transmute(t = t,
+            Date = Date,
+            Year = year,
+            P_inflow = Seg1in+Seg2in+Seg3in+Seg4in,
+            P_recycle = S1res+S2res+S3res+S4res)
+
+MT_df_mo_NB1$Date <- as.Date(MT_df_mo_NB1$Date, format = "%m/%d/%Y")
+
+MT_df_mo_NB1 <- MT_df_mo_NB1 %>% mutate(mo = month(Date)) %>% group_by(mo) %>%
+  summarise_at(vars(P_inflow:P_recycle),
+               funs(mean))
+
+# Changing all the values into metric tons
+MT_df_mo_NB1[,2:3] <- MT_df_mo_NB1[,2:3]/1000
+
+# ## Making all outgoing terms negative
+# MT_df_mo_NB1$P_outflow <- -MT_df_mo_NB1$P_outflow
+# MT_df_mo_NB1$P_settle <- -MT_df_mo_NB1$P_settle
+# MT_df_mo_NB1$P_burial <- -MT_df_mo_NB1$P_burial
+# MT_df_mo_NB1 <- MT_df_mo_NB1[,1:6]
+
+# Adjust P_settle to make P_burial look part of P_settle
+# MT_df_mo_NB1$P_settle <- MT_df_mo_NB1$P_settle - MT_df_mo_NB1$P_burial
+
+# gathering the data
+MT_df_gat_mo_NB1 <- cbind(MT_df_mo_NB1[1], stack(MT_df_mo_NB1[2:3]))
+
+MT_df_gat_mo_NB1$ind <- factor(MT_df_gat_mo_NB1$ind, levels = c("P_inflow","P_recycle"))
+
+# Plotting the results
+TP_MassTransfer_mo_NB1 <- ggplot(data = MT_df_gat_mo_NB1)+
+  geom_col(aes(x = mo, y = values, fill = ind), position = "stack", width = 0.75)+
+  scale_fill_manual("",values=c("orange red","orange"),
+                    label = c(expression(External~P~load), expression(Internal~P~load)))+
+  labs(x = "",
+       y = expression(atop(Mass~transfer,rate~of~P~(MT/year))))+
+  scale_x_continuous(breaks = seq(1,12),
+                     labels = month.abb)+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 0.5,
+        legend.text.align = 0,
+        legend.direction = "horizontal",
+        # legend.position = c(0.5,0.1),
+        legend.position = "bottom",
+        text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        axis.text = element_text(size = 10, color="black"),
+        axis.ticks = element_line(color = "black"),
+        axis.text.x = element_text(angle = 90, vjust = 0.2),
+        legend.text = element_text(size = 10, color="black"),
+        panel.background = element_rect(fill = "transparent"),
+        plot.background = element_rect(fill = "transparent", color = NA),
+        legend.background = element_rect(fill = "transparent"),
+        legend.box.background = element_rect(fill = "transparent", color = NA),
+        legend.key = element_rect(fill = "transparent", colour = NA))
+
+TP_MassTransfer_mo_NB1
+
+# Saving the plot
+# png(file="OutputFiles/JLPMv016_TP_MassTransfer_mo_NB1.png",height=2.5,width=4,units='in',res=1200, bg = "transparent")
+# TP_MassTransfer_mo_NB1
+# dev.off()
+```
+# Saving the file
+```{r Save file, echo=TRUE, message=FALSE, warning=FALSE}
+# Saved on 04-28-2023
+# save.image("RWorkSpaces/JLPMv016p002_1.RData")
+
+
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+End_timer2 <- Sys.time()
+
+# Total time taken to run the entire notebook
+Tot_time2 <- End_timer2 - Start_timer2
+Tot_time2
+```
+
+**Part 3:** 1. Prior and posterior distribution 2. Internal phosphorus loading

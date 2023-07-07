@@ -1,0 +1,857 @@
+---
+title: "Jordan Lake Reservoir Model"
+subtitle: "Part1: Model simulation for 1983-2018 period"
+author: "Smitom Borah"
+date: "04/25/2023"
+output: 
+  html_notebook:
+    toc : yes
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
+
+```{=html}
+<style type="text/css">
+
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+  text-align: center;
+}
+
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+  text-align: center;
+}
+
+h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Red;
+  text-align: center;
+}
+
+</style>
+```
+
+Time required to run the entire notebook: ~3 hrs
+
+
+# Motivation
+The codes in this R notebook are the codes used to prepare the results and discussion in the paper. Most of the codes are taken from the version 10 (and version 15) of this model. A new version was needed as the previous version (version 15) had too many modifications and experimentation, making that version less tractable.
+
+# Edit log
+
+*No new edits since creation*
+
+# Introduction
+
+The mass balance equation for phosphorus in the water column is as follows:\
+
+\begin{align}
+\tag{1}
+\frac{dM_i}{dt}=(R_s\times S_i)\theta_R^{T-20}+(Qin_i\times Cin_i)(1-\psi)-M_i(k+\frac{v\times A_i}{V_i})\theta_V^{T-20}+ Q_{i-1,i}\times\frac{M_{i-1}}{V_{i-1}}-Q_{i,i+1}\times \frac{M_i}{V_i}
+\end{align}\
+
+In case of reverse flow (south to north), the lase two terms are replaced by the following :\
+\begin{align}
+\tag{2}
+ Q_{i+1,i}\times\frac{M_{i+1}}{V_{i+1}}-Q_{i,i-1}\times \frac{M_i}{V_i}
+\end{align}\
+
+The mass balance for phosphorus in the sediments is as follows:\
+\begin{align}
+\tag{3}
+\frac{dS_i}{dt}=(M_i(k + \frac{v\times A_i}{V_i}))\theta_V^{T-20}-(R_s\times S_i)\theta_R^{T-20}-(B_r\times S_i)\theta_R^{T-20}
+\end{align}\
+
+The terms used in the preceding equations are described as follows:\
+
+| Terms      | Description                                                                                       | Units           |
+|:-------------|:------------------------------------------|--------------|
+| M~i~       | Mass of phosphorus in segment i water layer                                                       | kg              |
+| S~i~       | Mass of phosphorus in segment i sediment layer                                                    | kg              |
+| v          | Transfer rate of nutrients to the sediment layer, as an effective settling velocity               | m/month         |
+| k          | Transfer rate of nutrients to the sediment layer, as a first order removal rate                   | 1/month         |
+| $\psi$     | Watershed nutrient load adjustment factor                                                         | \-              |
+| R~s~       | Recycling rate of nutrients from the sediments back into the water layer                          | 1/month         |
+| B~r~       | Removal rate from the sediment to permanent burial                                                | 1/month         |
+| $\theta_V$ | Temperature adjustment parameter for the transfer of nutrients from the water column to sediments | \-              |
+| $\theta_R$ | Temperature adjustment parameter for the sediment nutrient recycling rate                         | \-              |
+| A~i~       | Area of segment i water layer at the surface (varies with time)                                   | 10^6^m^2^       |
+| V~i~       | Volume of segment i water layer (varies with time)                                                | 10^6^m^3^       |
+| Qin~i~     | Watershed inflow to segment i(varies with time)                                                   | 10^6^m^3^/month |
+| Cin~i~     | Concentration of phosphorus in watershed inflow(varies with time)                                 | mg/m^3^         |
+| Q~i-1,i~   | Flow from upstream segment to segment i(varies with time)                                         | 10^6^m^3^/month |
+| Q~i,i+1~   | Flow from segment i to the downstream segment (varies with time)                                  | 10^6^m^3^/month |
+
+# Packages
+
+A number of packages are loaded to run the model. However, there can be some curtailing in their numbers. Not all the packages are equally important for this model to run smoothly. The most important package is the ODIN package which helps us solve differential equations (1 and 3) efficiently.
+
+```{r clearing environment, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# SSB: Clearing the global environment----
+# rm(list = ls())
+cat("\014"); rm(list=ls(all=TRUE)); graphics.off()
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+Start_timer1 <- Sys.time()
+```
+
+
+```{r Packages, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# Loading packages----
+# DDG: ODIN cannot be installed like other packages and requires this process
+if (!require("pacman")) install.packages("pacman");pacman::p_load(shinyjs,threejs,brms,minpack.lm,MuMIn,lme4, penalized,zoo,RColorBrewer,
+  gridExtra,rowr,stringi,optimx,Hmisc,leaps,caret,magrittr,plotly,remotes,RcppRoll,suncalc,adaptMCMC,TTR, truncnorm, readxl,lubridate, data.table,deSolve,zoo,tidyverse,gridExtra, viridis, RColorBrewer)
+
+
+# SSB : To print all the columns of the tibble
+options(tibble.width = Inf)    
+
+```
+
+# Input data
+
+## loading input files
+
+The data required for this model has been stored in a number of files. These files are stored in other folders such as OutputFiles, DataFiles and RWorkSpaces. Following are the files required to run the model:
+
+-   Model Inputs Processed V5.csv
+-   PcalMidM_no19v2.RData
+-   functionsJorLak_no19.R
+-   TP Monthly Watershed Loading_dro 11_15.xlsx
+-   lakeOmidM_no19v2.csv
+
+*Note:* Please ensure that the working directory is where the project is stored. To change: Tools \> Global Options... \> R Markdown \> Evaluate chunks in directory 'Project'.
+
+```{r Input Data, echo=TRUE, message=FALSE, warning=FALSE}
+# Loading the input files ----
+# Seed value
+eff_se1 <- 5000  
+
+# DDG: can load previous MCMC results
+load("RWorkSpaces/PcalMidM_no19v2.RData")
+
+
+# the previous optimum parameters as the initial values.
+prev_opt <- opt_prm
+
+# Hydrological model input; data based on SSB's values
+RoutMOdin <- read_excel('DataFiles/Model Inputs Processed V5.xlsx', sheet = "Model Inputs Processed V5")
+
+RoutMOdin$yrmo <- paste0(RoutMOdin$mo,"/",RoutMOdin$year)
+
+RoutMOdin = RoutMOdin %>% arrange(t)#don't let it sort by "yrmo" like it defaults to
+
+# DDG: start and end month of simulation
+st.mo="1/1983"
+end.mo="12/2018"
+
+
+# total number of years
+tmax=which(RoutMOdin[,"yrmo"]==end.mo)-which(RoutMOdin[,"yrmo"]==st.mo)+1 # DDG: add 1 for inclusive period
+
+# Rearranging RoutMOdin
+RoutMOdin=RoutMOdin[(which(RoutMOdin[,"yrmo"]==st.mo)):which(RoutMOdin[,"yrmo"]==end.mo),]
+
+# SSB: the t column is reassigned to have continuously increasing natural numbers
+RoutMOdin$t = c(1:tmax)
+
+
+# DDG: transformation parameters here for box-cox transformation
+l1 = 0
+l2 = 0
+
+# DDG: custom functions loaded here
+suppressMessages(source("Pmodels/JLPMfunv16p001.R"))  # Same as functionsJorLak_Aug22.R but renamed
+
+# Fix watersheds concentrations using Dn's spreadsheet(inspiration: sceChl_oc19)
+read_excel("DataFiles/TP Monthly Watershed Loading_dro 11_15.xlsx",'Segment loads', range = "A2:S434",col_names =T) %>%
+  dplyr::select(yrmo,C1in,C2in,C3in,C4in) -> updConc
+
+# SSB: Adding the correct inflow P concentration
+RoutMOdin %<>% dplyr::select(-C1in,-C2in,-C3in,-C4in) %>%
+  left_join(.,updConc)
+
+# Processed observed lacustrine data
+data_file <- "DataFiles/lakeOmidM_no19v2.csv"
+obs <- read_csv(data_file) %>% 
+  transmute(ym=factor(paste(month(cale_date),year(cale_date),sep="/")),
+    obs=sePmo,variable=paste0("C",readr::parse_number(segm))) %>% 
+  drop_na()
+```
+
+# Stratification: Surface modifiers
+
+To incorporate stratification in the model indirectly, we developed random forest models for each segment to simulate bottom-to-surface P ratios and the coefficient of determination of the models ranged 0.28 to 0.5. More importantly, the seasonal median of the predicted values were similar to the observed seasonal mean, which gave us confidence to go ahead and use these model.The model outputs are stored in the following csv files:
+
+-   predBoSuP_Seg2RF4.csv
+-   predBoSuP_Seg3RF4.csv
+-   predBoSuP_Seg4RF4.csv
+
+```{r Surface modifier, echo=TRUE, message=FALSE, warning=FALSE}
+# get segment 2, 3, and 4 data:
+Seg2_BoSuP <- read.csv('DataFiles/predBoSuP_Seg2RF4.csv')
+Seg3_BoSuP <- read.csv('DataFiles/predBoSuP_Seg3RF4.csv')
+Seg4_BoSuP <- read.csv('DataFiles/predBoSuP_Seg4RF4.csv')
+
+# Getting the date and bottom to surface P ratios in one data frame
+BoSuP_df <- merge(Seg2_BoSuP[,c("Date", "pred_BoSuP")], 
+                  Seg3_BoSuP[,c("Date", "pred_BoSuP")],
+                  by = "Date")
+BoSuP_df <- BoSuP_df %>% rename(.,
+                                Seg2_Rp = pred_BoSuP.x,
+                                Seg3_Rp = pred_BoSuP.y)
+
+BoSuP_df <- merge(BoSuP_df, Seg4_BoSuP[,c("Date", "pred_BoSuP")], by = "Date" )
+BoSuP_df$Date <- as.Date(BoSuP_df$Date)
+BoSuP_df <- BoSuP_df %>% rename(.,
+                                Seg4_Rp = pred_BoSuP)
+
+
+
+## Calculating the monthly median
+BoSuP_df <- BoSuP_df %>% mutate(Month = month(Date),
+                                Year = year(Date))
+BoSuP_MoDf <- BoSuP_df %>%
+  group_by(Year, Month) %>%
+  summarise(Seg2_Rp = median(Seg2_Rp),
+            Seg3_Rp = median(Seg3_Rp),
+            Seg4_Rp = median(Seg4_Rp)) %>%
+  mutate(yrmo = paste0(Month,"/",Year))
+
+BoSuP_MoDf <- BoSuP_MoDf[which(BoSuP_MoDf$yrmo %in% RoutMOdin$yrmo),]
+
+
+## Simulated ratios of Segments 2, 3 and 4
+ConSurM=data.frame(matrix(vector(),tmax,3,dimnames=list(c(), c("S2", "S3", "S4"))))
+for (i in 1:tmax){
+  ConSurM[i,"S2"]=RoutMOdin[i,"V2"]/(RoutMOdin[i,"V2"]+RoutMOdin[i,"V2down"]*(-1+BoSuP_MoDf[i, "Seg2_Rp"]))
+  ConSurM[i,"S3"]=RoutMOdin[i,"V3"]/(RoutMOdin[i,"V3"]+RoutMOdin[i,"V3down"]*(-1+BoSuP_MoDf[i, "Seg3_Rp"]))
+  ConSurM[i,"S4"]=RoutMOdin[i,"V4"]/(RoutMOdin[i,"V4"]+RoutMOdin[i,"V4down"]*(-1+BoSuP_MoDf[i, "Seg4_Rp"]))
+}
+```
+
+
+# Initial variables
+
+In the following code, first a time vector was created, the length of which would be equal to tmax. All the vectors will have the same length. Subsequently, a mass vector and a concentration vectors were also created. This vector was initialized as 0 in each elements. The initial values of mass and concentration were stored in separate variables. The initial values are calculated based on the average values calculated in another excel file, lake Sediment P concentration.xlsx.
+
+```{r Set up variables, echo=TRUE, message=FALSE, warning=FALSE}
+#set up variables----
+# build numeric model do Euler first
+tOd= (1:tmax)# this will be the timestep variable for running the loop
+timestep  = rep(1,tmax)
+#mass predictions will go in these (in kg)
+M1 = rep(NA,tmax)
+M2 = rep(NA,tmax)
+M3 = rep(NA,tmax)
+M4 = rep(NA,tmax)
+#concentrations in kg/Mm^3 or mg/M^3
+C1 = rep(NA,tmax)
+C2 = rep(NA,tmax)
+C3 = rep(NA,tmax)
+C4 = rep(NA,tmax)
+
+#initial state in kg
+M1init = (3120)
+M2init = (4448)
+M3init = (4530)
+M4init = (4390)
+
+#new sediment values
+S1init = (.544*10^6)
+S2init = (.589*10^6)
+S3init = (.789*10^6)
+S4init = (.276*10^6)
+
+#average sediment conc. in kg/m^2 = .0456
+#sd of average sediment conc in kg/m^2 = .0250
+#values calculated in "lake Sediment P concentration.xlsx"
+#Here we apply these average values of sediment concentration to each of the areas of the 4 segments
+#this produces an expected initial value of P in kg. 
+#these values are listed above in S1init-S4init
+#The intial concentration and sd are then normalized to allow for a prior to shape the factors for these values later on
+#seg1
+# smplavg = .0456* 11.94*10^6
+# smplesd = .0250* 11.94*10^6
+
+#seg2
+# smplavg = .0456* 12.92*10^6
+# smplesd = .0250* 12.92*10^6
+
+#seg3
+# smplavg = .0456* 17.28*10^6
+# smplesd = .0250* 17.28*10^6
+
+#seg4
+# smplavg = .0456* 6.057*10^6
+# smplesd = .0250* 6.057*10^6
+
+# Remember: Wsh inflows (Mm3/mo); Conc inputs (mg/m^3)	
+```
+
+# ODIN Model setup
+
+To know about the basic working of the ODIN package, kindly go through the README file of the package. One can also go through the following link to get a quick brush up of the fundamental concepts:\
+<https://github.ncsu.edu/sborah/JordanLakePmodel/blob/TempBranch1/ODIN-example.md>
+
+```{r Odin Model setup, message=FALSE, warning=FALSE}
+#set up the ODIN model
+lakemod_v0 <- odin::odin({
+  #           Resuspension & tmp adjust    Wsh in           dwnstr in   upstr in     Settling& tmp adjust                                    outflow
+  deriv(M1) <- (S1*Rs)*(ThetaR^(Tmp-20))+(Q1in*C1in)*(1-Sh)+(Q21*M2/V2)            -((M1*(Ks+Vs*A1/V1))*(ThetaV^(Tmp-20))+(Q12*M1/V1))
+  deriv(M2) <- (S2*Rs)*(ThetaR^(Tmp-20))+(Q2in*C2in)*(1-Sh)+(Q32*M3/V3)+(Q12*M1/V1)-((M2*(Ks+Vs*A2/V2))*(ThetaV^(Tmp-20))+(Q23*M2/V2)+(Q21*M2/V2))
+  deriv(M3) <- (S3*Rs)*(ThetaR^(Tmp-20))+(Q3in*C3in)*(1-Sh)+(Q43*M4/V4)+(Q23*M2/V2)-((M3*(Ks+Vs*A3/V3))*(ThetaV^(Tmp-20))+(Q34*M3/V3)+(Q32*M3/V3))
+  deriv(M4) <- (S4*Rs)*(ThetaR^(Tmp-20))+(Q4in*C4in)*(1-Sh)+            (Q34*M3/V3)-((M4*(Ks+Vs*A4/V4))*(ThetaV^(Tmp-20))+(M4*Q4out/V4)+(Q43*M4/V4))
+  #          Settle in&temp adjust          Burial   resuspension&temp adjust
+  deriv(S1) <- (M1*(Ks+Vs*A1/V1))*(ThetaV^(Tmp-20))-((S1*Bs)+(S1*Rs)*(ThetaR^(Tmp-20)))
+  deriv(S2) <- (M2*(Ks+Vs*A2/V2))*(ThetaV^(Tmp-20))-((S2*Bs)+(S2*Rs)*(ThetaR^(Tmp-20)))
+  deriv(S3) <- (M3*(Ks+Vs*A3/V3))*(ThetaV^(Tmp-20))-((S3*Bs)+(S3*Rs)*(ThetaR^(Tmp-20)))
+  deriv(S4) <- (M4*(Ks+Vs*A4/V4))*(ThetaV^(Tmp-20))-((S4*Bs)+(S4*Rs)*(ThetaR^(Tmp-20)))
+  
+  initial(M1) <- M1init
+  initial(M2) <- M2init
+  initial(M3) <- M3init
+  initial(M4) <- M4init
+  
+  initial(S1) <- S1init*S1fac
+  initial(S2) <- S2init*S1fac
+  initial(S3) <- S3init*S1fac
+  initial(S4) <- S4init*S1fac
+  
+  M1init = user()
+  M2init = user()
+  M3init = user()
+  M4init = user()
+  
+  S1init = user()
+  S2init = user()
+  S3init = user()
+  S4init = user()
+  
+  Vs = user()
+  Ks = user()
+  Bs = user()
+  Rs = user()
+  Sh = user()
+  ThetaR = user()
+  ThetaV = user()
+  S1fac = user()
+  timestep[] = user()
+  V1 = interpolate(timestep,V1t,"constant")
+  V2 = interpolate(timestep,V2t,"constant")
+  V3 = interpolate(timestep,V3t,"constant")
+  V4 = interpolate(timestep,V4t,"constant")
+  Q1in = interpolate(timestep,Q1int,"constant")
+  Q2in = interpolate(timestep,Q2int,"constant")
+  Q3in = interpolate(timestep,Q3int,"constant")
+  Q4in = interpolate(timestep,Q4int,"constant")
+  Q12 = interpolate(timestep,Q12t,"constant")
+  Q21 = interpolate(timestep,Q21t,"constant")
+  Q23 = interpolate(timestep,Q23t,"constant")
+  Q32 = interpolate(timestep,Q32t,"constant")
+  Q34 = interpolate(timestep,Q34t,"constant")
+  Q43 = interpolate(timestep,Q43t,"constant")
+  Q4out = interpolate(timestep,Q4outt,"constant")
+  A1 = interpolate(timestep,A1t,"constant")
+  A2 = interpolate(timestep,A2t,"constant")
+  A3 = interpolate(timestep,A3t,"constant")
+  A4 = interpolate(timestep,A4t,"constant")
+  C1in= interpolate(timestep,C1int,"constant")
+  C2in= interpolate(timestep,C2int,"constant")
+  C3in= interpolate(timestep,C3int,"constant")
+  C4in= interpolate(timestep,C4int,"constant")
+  Tmp = interpolate(timestep,Tmpt,"constant")
+  
+  V1t[] = user()
+  V2t[] = user()
+  V3t[] = user()
+  V4t[] = user()
+  Q1int[] = user()
+  Q2int[] = user()
+  Q3int[] = user()
+  Q4int[] = user()
+  Q12t[] = user()
+  Q21t[] = user()
+  Q23t[] = user()
+  Q32t[] = user()
+  Q34t[] = user()
+  Q43t[] = user()
+  Q4outt[] = user()
+  A1t[] = user()
+  A2t[] = user()
+  A3t[] = user()
+  A4t[] = user()
+  C1int[] = user()
+  C2int[] = user()
+  C3int[] = user()
+  C4int[] = user()
+  Tmpt[] = user()
+  
+  dim(V1t) = user()
+  dim(V2t) = user()
+  dim(V3t) = user()
+  dim(V4t) = user()
+  dim(Q1int) = user()
+  dim(Q2int) =user()
+  dim(Q3int) = user()
+  dim(Q4int) = user()
+  dim(Q12t) =user()
+  dim(Q21t) =user()
+  dim(Q23t) =user()
+  dim(Q32t) =user()
+  dim(Q34t) = user()
+  dim(Q43t) =user()
+  dim(Q4outt) = user()
+  dim(A1t) =user()
+  dim(A2t) = user()
+  dim(A3t) = user()
+  dim(A4t) = user()
+  dim(C1int)= user()
+  dim(C2int)= user()
+  dim(C3int)= user()
+  dim(C4int)= user()
+  dim(Tmpt) = user()
+  dim(timestep)=user()
+})  
+```
+
+# Setting up test parameters
+
+```{r Settingup the parameters, message=FALSE, warning=FALSE}
+# Scaling factors
+## SSB: The idea of scaling factors is to ensure that all the parameters have similar values when running the MCMC simulations. ## Sh_shift is taken as additive factor rather than multiplicative factor to ensure that the Sh parameter does not become negative during the MCMC run.
+par_scal <- 100
+vs_scal <- 1/100
+Sh_shift <- 1
+
+# test parameters
+Vs = 5*vs_scal #[m/mo/par_scal]
+Ks = 1 #[/mo]
+Bs = .0002*par_scal #[/mo/par_scal]
+Rs = .0002*par_scal #[/mo/par_scal]
+Sh = 0.2+Sh_shift
+ThetaR = 1.05 #unitless 
+ThetaV = 1.05 #unitless
+S1fac = 1 #unitless factor
+```
+
+# Model wrapper function
+
+To make it easier to change the model parameters and read the model output, a function was written whose input parameters are as follows:\
+
+-   **inp_dat**: the list of input values of different auxillary variables such as V1, V2, A1, A4, Cint, etc present in the model equations
+-   **mod_fun**: the ODIN object created to solve the model equations
+-   **CalPar**: the list of parameters values used for the model
+-   **FixInp_lis**: the list of initial conditions and timestep\
+
+The mode_wrap_vO() first converts the model parameter values back to its original values and stores them, together with auxilary variables values and initial conditions, in a new object called OmnImp. This variable serves as the input values for the user() used in the ODIN model setup. Consequently, after suppressing the warnings for running the ODIN object for tmax times, the results of P mass in water column and sediments are stored in a data frame called y_c. This data frame is further merged with certain columns of RoutMOdin\$V1. Furthermore, using the surface modifiers, the concentrations of P in all the 4 segments are calculated and stored in the y_c data frame, replacing all the previous values. y_c is further rearranged similar to obs data frame using melt function and merged with the obs data frame to get the final output which contains the P concentrations both in the water column and sediments.\
+
+```{r Model wrap, echo=TRUE, message=FALSE, warning=FALSE}
+# Preparing the input as lists of parameters
+## Constant parameters
+Const_lis <- list(M1init=M1init,M2init=M2init,M3init=M3init, M4init=M4init,
+                  S1init=S1init,S2init=S2init,S3init=S3init, S4init=S4init,timestep= tOd)
+
+## Dynamic hydrologic parameters
+inp_lis <- list(V1t = RoutMOdin$V1[1:tmax],
+                V2t = RoutMOdin$V2[1:tmax],
+                V3t = RoutMOdin$V3[1:tmax],
+                V4t = RoutMOdin$V4[1:tmax],
+                Q1int = RoutMOdin$Q1in[1:tmax],
+                Q2int = RoutMOdin$Q2in[1:tmax],
+                Q3int = RoutMOdin$Q3in[1:tmax],
+                Q4int = RoutMOdin$Q4in[1:tmax],
+                Q12t = RoutMOdin$Q12[1:tmax],
+                Q21t = RoutMOdin$Q21[1:tmax],
+                Q23t = RoutMOdin$Q23[1:tmax],
+                Q32t = RoutMOdin$Q32[1:tmax],
+                Q34t = RoutMOdin$Q34[1:tmax],
+                Q43t = RoutMOdin$Q43[1:tmax],
+                Q4outt = RoutMOdin$Q4out[1:tmax],
+                A1t = RoutMOdin$A1[1:tmax],
+                A2t = RoutMOdin$A2[1:tmax],
+                A3t = RoutMOdin$A3[1:tmax],
+                A4t = RoutMOdin$A4[1:tmax],
+                C1int= RoutMOdin$C1in[1:tmax],
+                C2int= RoutMOdin$C2in[1:tmax],
+                C3int= RoutMOdin$C3in[1:tmax],
+                C4int= RoutMOdin$C4in[1:tmax],
+                Tmpt = RoutMOdin$Temperature[1:tmax])
+
+# Model parameters
+## SSB: creating a list of parameters using the test parameter values
+par_ini <- c(Vs = Vs,Ks=Ks, Bs = Bs,Rs = Rs, Sh=Sh, ThetaR = ThetaR,ThetaV = ThetaV,
+             S1fac = S1fac)
+
+# model wrapper function to easily change model parameters and read model output
+mod_wrap_v0 <- function(inp_dat=inp_lis,
+                        mod_fun=lakemod_v0, 
+                        CalPar=par_ini, 
+                        FixInp_lis=Const_lis){
+  
+  # SSB: New list of parameters with their values back-transformed
+  CalPar_lis <- list(
+    Vs= CalPar["Vs"]/vs_scal,Ks= CalPar["Ks"], Bs= CalPar["Bs"]/par_scal,Rs= CalPar["Rs"]/par_scal,
+    Sh= CalPar["Sh"]-Sh_shift,
+    ThetaR= CalPar["ThetaR"],ThetaV= CalPar["ThetaV"],
+    S1fac= CalPar["S1fac"])
+  
+  # Storing all the input values together one list
+  OmnInp <- c(CalPar_lis,inp_dat,FixInp_lis)
+  
+  # Solving the differential equations
+  mod_cmpl <- suppressWarnings(mod_fun(user=OmnInp)) 
+  
+  y_c <- mod_cmpl$run(tOd, tcrit = tmax)
+  
+  y_c <- data.frame(y_c)
+  # SSB: create concentration columns that match observation data
+  y_c = merge(x = y_c,y = RoutMOdin[,c(2,3,4,5,6)],by = "t")
+  
+  # SSB: adding new columns to the data frame
+  y_c$C1 <- (y_c$M1)/RoutMOdin$V1
+  
+  # do stratification fix here
+  y_c$C2=y_c$M2/RoutMOdin$V2*ConSurM[,"S2"]
+  y_c$C3=y_c$M3/RoutMOdin$V3*ConSurM[,"S3"]
+  y_c$C4=y_c$M4/RoutMOdin$V4*ConSurM[,"S4"]
+  
+  # SSB: creating a data frame that contains only the concentration in the 4 segments
+  y_c <- y_c[,c("yrmo","C1","C2","C3","C4")]
+  
+  # SSB: using melt function to convert the columns into rows, taking yrmo as the id.vars
+  outm <- melt(y_c, id.vars = "yrmo")
+  
+  # the outm object has the data in the same format as the obs data.
+  colnames(outm) <- c("ym","variable","value")
+  
+  # the P concentration in the lake and sediments are merged together and presented as tibble
+  outff <- merge(outm, obs, by = c("ym","variable")) %>% as_tibble() 
+  return(outff)
+}
+
+
+
+# quick r2 test using test parameter values
+mod_wrap_v0(CalPar=par_ini) %>% {VarExp(.[["value"]],.[["obs"]])}
+```
+
+# MCMC setup
+
+```{r MCMC setup, echo=TRUE, message=FALSE, warning=FALSE, paged.print=TRUE}
+#Setup MCMC
+# DDG: now we can easily test effect of different parameters on model output
+test <- c(Vs = 5*vs_scal,
+          Ks = 1,
+          Bs = .0002*par_scal,# DDG: note, this is too close to 0
+          Rs = .0002*par_scal,
+          Sh = 0.2,
+          ThetaR = 1.05,
+          ThetaV = 1.05,
+          S1fac = 1,
+          sy = .33)
+
+
+
+# save obs data for use in likelihood
+obs_dat <- mod_wrap_v0(CalPar=test) %>% pull(obs)
+
+
+# DDG: moved functions to other script that can be sourced (earlier)
+
+#Dario's MCMC set-up process & log transform
+# define prior distributions
+priors<- list(
+  Vs =c("truncnorm", 0, Inf, 1.3*vs_scal,sd = 1.4*vs_scal),# DDG: notice scaling
+  Ks =c("truncnorm", 0, Inf, .2, sd = .26),
+  Bs =c("truncnorm", 0, 1*par_scal, 0.001*par_scal, sd = .001*par_scal), 
+  Rs =c("truncnorm", 0, 1*par_scal, mean = .003*par_scal, sd = 0.0018*par_scal),     
+  # Sh =c("truncnorm", -1+Sh_shift, 1+Sh_shift, .1+Sh_shift, sd = .1+Sh_shift),
+  Sh =c("truncnorm", -1+Sh_shift, 1+Sh_shift, .3+Sh_shift, sd = .1+Sh_shift),
+  ThetaR = c("truncnorm", 0,Inf,mean = 1.05, sd = .03),
+  ThetaV = c("truncnorm", 0,Inf,mean = 1.05, sd = .03),
+  S1fac = c("truncnorm",0,5,mean = 1, sd = .548),
+  sy  =  c("uniform", 0.000,1000,sd=1)
+)
+
+# test components of the posterior 
+## i
+logpri(par=test,priors=priors)
+
+## ii
+loglik(par=test,mod_fun=mod_wrap_v0,
+       yObs=obs_dat,lambda1=l1,lambda2=l2)
+
+## iii
+logpost(par=test,priors=priors,mod_fun=mod_wrap_v0,
+        yObs=obs_dat,lambda1=l1,lambda2=l2)
+
+# DDG: check max order of magnitude difference among variances of params
+purrr::map_chr(priors, "sd") %>% as.numeric %>% 
+  `^`(2) %>% range %>% log10(.) %>% diff  %>% round # much better than without par_scal (7 orders of magn)
+
+# DDG: better definition based on prior sdv (fewer -Inf)
+ini.jump.cov <- purrr::map_chr(priors, "sd") %>% as.numeric %>% 
+  `^`(2) %>% diag
+```
+
+# Running the MCMC model
+
+The MCMC model was ran for 100000 iterations.
+
+```{r MCMC model run, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# Defne number of iterations and burnin
+n.iter=100000                        
+
+# starting the timer
+start.time = Sys.time()
+
+# setting seed
+set.seed(eff_se1)
+
+# MCMC run
+RAM <- MCMC(p     = logpost, #objective function
+            init  = prev_opt*rnorm(length(test),1,.02), #vector of initial values
+            scale = ini.jump.cov, #covariance of the jump distribution
+            n     = n.iter, #iterations
+            adapt = T, #adaptive sampling is used (true or false
+            acc.rate = 0.3,  #acceptance rate
+            n.start = 50, #internal argument defining after which iteration adaptation is applied
+            # ancillary logpost arguments: could be hardcoded, if preferred
+            priors=priors,mod_fun=mod_wrap_v0,
+            yObs=obs_dat,lambda1=l1,lambda2=l2
+)
+
+# Stopping the timer
+end.time = Sys.time()
+
+# Time taken to run the MCMC simulation
+time.taken.MCMC <- end.time - start.time
+```
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Temporary save
+save.image("RWorkSpaces/JLPMv016p001_0.RData")
+```
+
+
+## Brief analysis of the MCMC model run
+```{r MCMC results, echo=TRUE, message=FALSE, warning=FALSE}
+time.taken.MCMC 
+# DDG: brief analysis of results
+cbind(RAM$samples,logpost= RAM$log.p) %>% as_tibble() %>% 
+  mutate(Vs=Vs/vs_scal,Bs=Bs/par_scal,Rs=Rs/par_scal,Sh = Sh-Sh_shift) %>% tail(25000) %>% 
+  as.matrix %>% sysanal.plot.chains()
+
+# DDG: R2 of calibrated model
+post.param <- cbind(RAM$samples) %>% as_tibble() %>% tail(25000) %>% summarise_all(.,.funs = mean) %>% as.numeric
+post.param.names <- c("Vs", "Ks", "Bs", "Rs", "Sh", "ThetaR", "ThetaV", "S1fac", "sy")
+opt_prm <- setNames(post.param, post.param.names)
+
+# opt_prm  <- RAM$samples[which.max(RAM$log.p),]
+opt_prm 
+mod_wrap_v0(CalPar=opt_prm) %>% {VarExp(.[["value"]],.[["obs"]])}
+
+# # Saving the plot
+# png(file="OutputFiles/JLPMv016_TracerPlots.png",width = 6, height = 4, units = 'in', res = 1200)
+# cbind(RAM$samples,logpost= RAM$log.p) %>% as_tibble() %>%
+#   mutate(Vs=Vs/vs_scal,Bs=Bs/par_scal,Rs=Rs/par_scal,Sh = Sh-Sh_shift) %>% tail(25000) %>%
+#   as.matrix %>% sysanal.plot.chains()
+# dev.off()
+
+
+```
+
+
+# Updated Model Parameters
+
+The model parameters are updated based on the MCMC simulations.
+
+```{r Parameter update, echo=TRUE, message=FALSE, warning=FALSE}
+#Automatically set parameters
+output_prm <- opt_prm
+output_prm["Vs"] <- output_prm["Vs"]/vs_scal
+output_prm["Bs"] <- output_prm["Bs"]/par_scal
+output_prm["Rs"] <- output_prm["Rs"]/par_scal
+output_prm["Sh"] <- output_prm["Sh"]-Sh_shift
+
+# Posterior parameters central value
+output_prm 
+```
+
+# Model Run
+
+With the updated the parameters, the model is ran again to determine the phosphorus concentrations in the water column and sediments of the Jordan lake.
+
+```{r}
+#create output file using new model formulation
+CalPar_lis <- list(
+  Vs= output_prm["Vs"],Ks= output_prm["Ks"],Bs= output_prm["Bs"],Rs= output_prm["Rs"],
+  Sh= output_prm["Sh"],
+  ThetaR= output_prm["ThetaR"],ThetaV= output_prm["ThetaV"],
+  S1fac= output_prm["S1fac"])
+  
+OmnInp <- c(CalPar_lis,inp_lis,Const_lis)
+mod_cmpl <- suppressWarnings(lakemod_v0(user=OmnInp))
+y_c <- mod_cmpl$run(tOd, tcrit = tmax)
+y_c <- data.frame(y_c)
+
+#create concentration columns that match observation data
+y_c = merge(x = y_c,y = RoutMOdin[,c(2,3,4,5,6)],by = "t")
+y_c$C1 <- (y_c$M1)/RoutMOdin$V1
+y_c$C2all <- (y_c$M2)/RoutMOdin$V2
+y_c$C3all <- (y_c$M3)/RoutMOdin$V3
+y_c$C4all <- (y_c$M4)/RoutMOdin$V4
+
+#do stratification fix here
+y_c$C2=y_c$M2/RoutMOdin$V2*ConSurM[,"S2"]
+y_c$C3=y_c$M3/RoutMOdin$V3*ConSurM[,"S3"]
+y_c$C4=y_c$M4/RoutMOdin$V4*ConSurM[,"S4"]
+
+#evaluate results, keep this in the code!
+y_c_eval <- y_c[,c("yrmo","C1","C2","C3","C4")]
+outm <- suppressWarnings(melt(y_c_eval, id.vars = "yrmo"))
+colnames(outm) <- c("ym","variable","value")
+outf <- outm %>%
+  group_by(ym,variable) %>%
+  suppressMessages(summarise(pre = mean(value, na.rm=T)))
+outff <- merge(outm, obs, by = c("ym","variable"))
+testLm = lm(obs~value,data = outff)
+summary(testLm)
+plot(outff$value,outff$obs)
+
+#coeff of determination, R2
+VarExp(outff[,"value"],outff[,"obs"])
+
+######assemble the file
+MassFlows = y_c
+colnames(MassFlows) = c("t",
+                        "M1","M2","M3","M4",
+                        "S1","S2","S3","S4",
+                        "mo","yrmo","Date","year",
+                        "C1","C2","C3","C4",
+                        "C2sur", "C3sur","C4sur")
+
+#Input loadings to Segments
+MassFlows$Seg1in = RoutMOdin$C1in*RoutMOdin$Q1in*(1-output_prm["Sh"])
+MassFlows$Seg2in = RoutMOdin$C2in*RoutMOdin$Q2in*(1-output_prm["Sh"])
+MassFlows$Seg3in = RoutMOdin$C3in*RoutMOdin$Q3in*(1-output_prm["Sh"])
+MassFlows$Seg4in = RoutMOdin$C4in*RoutMOdin$Q4in*(1-output_prm["Sh"])
+
+#Net Flows between Segments
+MassFlows$Seg12 = MassFlows$C1*RoutMOdin$Q12 - MassFlows$C2*RoutMOdin$Q21
+MassFlows$Seg23 = MassFlows$C2*RoutMOdin$Q23 - MassFlows$C3*RoutMOdin$Q32
+MassFlows$Seg34 = MassFlows$C3*RoutMOdin$Q34 - MassFlows$C4*RoutMOdin$Q43
+MassFlows$outflow = MassFlows$C4*RoutMOdin$Q4out
+
+#Loading to Sediments
+MassFlows$S1set = MassFlows$C1*(opt_prm["Ks"]*RoutMOdin$V1+output_prm["Vs"]*RoutMOdin$A1)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
+MassFlows$S2set = MassFlows$C2*(opt_prm["Ks"]*RoutMOdin$V2+output_prm["Vs"]*RoutMOdin$A2)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
+MassFlows$S3set = MassFlows$C3*(opt_prm["Ks"]*RoutMOdin$V3+output_prm["Vs"]*RoutMOdin$A3)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
+MassFlows$S4set = MassFlows$C4*(opt_prm["Ks"]*RoutMOdin$V4+output_prm["Vs"]*RoutMOdin$A4)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
+
+#resuspension of sediment TP
+MassFlows$S1res = (MassFlows$S1*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
+MassFlows$S2res = (MassFlows$S2*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
+MassFlows$S3res = (MassFlows$S3*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
+MassFlows$S4res = (MassFlows$S4*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
+
+#Permanent Burial Rate
+MassFlows$S1Bur = MassFlows$S1*output_prm["Bs"]
+MassFlows$S2Bur = MassFlows$S2*output_prm["Bs"]
+MassFlows$S3Bur = MassFlows$S3*output_prm["Bs"]
+MassFlows$S4Bur = MassFlows$S4*output_prm["Bs"]
+
+#temperature
+MassFlows$Temp = RoutMOdin$Temperature
+
+#cleanup
+MassFlows = MassFlows[,c(1,12,13,10,
+                        2,3,4,5,
+                        6,7,8,9,
+                        14:41)]
+
+
+
+```
+
+# Skill of the model
+
+We calculate the coefficient of determination (R^2^) and root mean square error (RMSE) for the model output to determine the skill of the model.
+
+```{r Model skill, echo=TRUE, message=FALSE, warning=FALSE}
+# Overeall model performance
+## Coefficient of determination
+AllR2 <- VarExp(outff[,"value"],outff[,"obs"])
+##  Root mean Square Error
+AllRMSE <- sqrt(mean((outff$value - outff$obs)^2))/1000 # Units: mg/L
+
+# Segment wise model performance
+## Storing all the segment names in a vector for the loop
+SegVec <- c("C1", "C2", "C3", "C4")
+## Creating an empty data frame
+PModPer <- data.frame(matrix(ncol = 3, nrow = 0)) %>% `colnames<-`(., c("Segment", "R2", "RMSE"))
+
+## Loop to calculate R2 and RMSE for each segment
+for (i in SegVec){
+  Cx = i
+  PobsSim <- outff[which(outff$variable==Cx),]
+  CxR2 <- VarExp(PobsSim[,"value"],PobsSim[,"obs"])
+  CxRMSE <- sqrt(mean((PobsSim$value - PobsSim$obs)^2))/1000 # units: mg/L
+  TmpModPer <- data.frame(Segment = Cx, R2 = CxR2, RMSE = CxRMSE) # temporary df
+  PModPer <- rbind(PModPer, TmpModPer) 
+}
+
+## Adding overall model performance to the PModPer data frame
+TmpModPerAll <- data.frame(Segment = "All", R2 = AllR2, RMSE = AllRMSE)
+PModPer <- rbind(PModPer, TmpModPerAll)
+
+# Quick view of the model performances
+PModPer
+
+```
+
+# Saving the workspace
+
+```{r Rworkspace, echo=TRUE, message=FALSE, warning=FALSE}
+# Saving the Workspace (01-29-2023)
+# save.image("RWorkSpaces/JLPMv016p001_1.RData")
+
+```
+
+# Data Visualization
+
+The data visualization of the model results are carried out in subsequent part.
+
+**Part 2:** 1. Prior and Posterior distribution 2. 1:1 Scatter plot 3. Mass Transfer plot 4. Sediment P release plot
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+End_timer1 <- Sys.time()
+
+# Total time taken to run the entire notebook
+Tot_time1 <- End_timer1 - Start_timer1
+Tot_time1
+```
+
+
+
+
+
+
