@@ -46,9 +46,3 @@ h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this t
 </style>
 ```
 
-| Folder | Description|
-|:---------|:----------------------------------------------------|
-|DataFiles| Data files such as .csv, .xlsx, .txt are stored in this folder. However, these files are not shared here. As these files tend to be larger, they are stored in google drive of the lab and can be requested from Dr. Dan Obenour.|
-|OutputFiles| All the markdown files, plots and data generated from the models are stored in this folder. |
-|Pmodels| All the models are stored in this folder. |
-|RWorkSpaces| R workspaces saved during the process of modeling are stored in this folder. However, these files are not shared here. As these files tend to be larger, they are stored in google drive of the lab and can be requested from Dr. Dan Obenour.|
