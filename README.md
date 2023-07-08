@@ -16,7 +16,7 @@ This repository contains the data and code used in the paper "Characterizing and
 
 To run this model, you will need a GitHub account. The details of creating a new GitHub account can be easily found over the internet.
 
-<h3 align="left">Installations</h3>
+<h3 align="left">Installations and setup</h3>
 
 Install Git, R, and RStudio from respective websites. To link Git to RStudio, open RStudio and go to _Tools_ > _Global Options…_ click on _Git/SVN_. Check _Enable version control interface for RStudio projects_. Set the path to the Git executable that was installed. Click _OK_ and restart Rstudio. If done correctly, the Git icon will appear on the RStudio toolbar. Next, configure Git and set your user name and email (the email address you used to register on GitHub). You can directly open the Git prompt from within RStudio. User name and email needs to be set only once. Go to Tools > Shell to open the Git Shell to tell Git your username and GitHub email.
 
