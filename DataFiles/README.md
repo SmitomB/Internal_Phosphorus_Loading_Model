@@ -4,6 +4,8 @@ This repository contains various data files that were used while running differe
 
 |File Name|Description|
 |-------------|-----------------------------------|
+|HypolimnionCalcs.xlsx| Data on mid depth of each segment over the years|
+|Loca_Temp_max_45.csv| Downscaled temperature projections under RCP 4.5 for the period 1980-2050. Data obtained from [Phase 5 of the Coupled Model Intercomparison Project (CMIP5)](http://gdo-dcp.ucllnl.org/downscaled_cmip_projections/)|
 |TP Monthly Watershed Loading_dro 11_15.xlsx| Input data to the model: P concentration in the inflow|
 |Model inputs Processed V5.xlsx| Input data to the model: area, volume, flows, depth, and bottom temperature|
 |lakeOmidM_no19v2.csv| Observed P data in the reservoir|
@@ -16,4 +18,4 @@ This repository contains various data files that were used while running differe
 |Segment2_Pdata.xlsx| P concentration data in Segment 2|
 |Segment3_Pdata.xlsx| P concentration data in Segment 3|
 |Segment4_Pdata.xlsx| P concentration data in Segment 4|
-|HypolimnionCalcs.xlsx| Data on mid depth of each segment over the years|
+
