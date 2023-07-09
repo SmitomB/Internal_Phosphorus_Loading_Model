@@ -1,9 +1,4 @@
 # functions needed for Jordan Lake model
-# Original author: Dario Del Giudice
-# New author: Smitom Borah
-
-# EDITS
-## 1. 08-31-2022 07:00 am: edited the sysanal.plot.chains() to make it publishable in the paper
 
 # calculate density of prior distribution
 logpri  <- function(par,priors)

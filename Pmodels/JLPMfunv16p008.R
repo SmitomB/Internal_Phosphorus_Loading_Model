@@ -1,5 +1,4 @@
 # functions needed for Jordan Lake model
-# author: Dario Del Giudice
 
 # calculate density of prior distribution
 logpri  <- function(par,priors)
@@ -367,54 +366,6 @@ creaInp <- function(inpdf,tlim=tmax)
 
 
 
-######################################################
-# processes model output, for predictions. Returns model results for every month
-
-mod_wrap_pred <- function(inp_dat=inp_lis, #needs updgraded/extended inputs
-                        mod_fun=lakemod_v0, 
-                        CalPar=par_ini, 
-                        FixInp_lis=Const_lis){
-  
-  CalPar_lis <- list(
-    Vs= CalPar["Vs"]/vs_scal,Ks= CalPar["Ks"], Bs= CalPar["Bs"]/par_scal,Rs= CalPar["Rs"]/par_scal,
-    Sh= CalPar["Sh"],
-    ThetaR= CalPar["ThetaR"],ThetaV= CalPar["ThetaV"],
-    S1fac= CalPar["S1fac"])
-
-  
-  OmnInp <- c(CalPar_lis,inp_dat,FixInp_lis)
-
-  mod_cmpl <- suppressWarnings(mod_fun(user=OmnInp)) # DDG:key part missing
-  y_c <- mod_cmpl$run(FixInp_lis$timestep)
-  
-  y_c <- data.frame(y_c)
-
-# model would predict average water column conc 
-y_c$C1 <- (y_c$M1)/inp_dat$V1t
-y_c$C2 <- (y_c$M2)/inp_dat$V2t
-y_c$C3 <- (y_c$M3)/inp_dat$V3t
-y_c$C4 <- (y_c$M4)/inp_dat$V4t
-
-#..........................
-
-#get modifiers to convert avg conc to surf
-CoAdj2 <- inp_dat$V2t/(inp_dat$V2t+inp_dat$V2downt*(-1+Rbs2[inp_dat$mot])) 
-CoAdj3 <- inp_dat$V3t/(inp_dat$V3t+inp_dat$V3downt*(-1+Rbs3[inp_dat$mot])) 
-CoAdj4 <- inp_dat$V4t/(inp_dat$V4t+inp_dat$V4downt*(-1+Rbs4[inp_dat$mot])) 
-
-
-#obtain surface concentrations, useful to compare model and suface data
-  y_c$C2sur=y_c$C2*CoAdj2
-  y_c$C3sur=y_c$C3*CoAdj3
-  y_c$C4sur=y_c$C4*CoAdj4
-
-  #record month
-  y_c$mo <- inp_dat$mot
-  
-  
-
-  return(y_c %>% as_tibble())
-}
 
 
 ####################################################
@@ -425,92 +376,6 @@ mon2seas <- function(mo){
     if (mo %in% c(9:11)) seas = "autumn"
   return(seas)
 }
-
-
-######################################################
-# processes model output, for predictions. Returns model results for every month
-
-mod_wrap_pred_v2 <- function(inp_dat=inp_lis, #needs updgraded/extended inputs
-                        mod_fun=lakemod_v0, 
-                        CalPar=par_ini, 
-                        FixInp_lis=Const_lis){
-  
-  CalPar_lis <- list(
-    Vs= CalPar["Vs"]/FixInp_lis$vs_scal,Ks= CalPar["Ks"], Bs= CalPar["Bs"]/FixInp_lis$par_scal,Rs= CalPar["Rs"]/FixInp_lis$par_scal,
-    Sh= CalPar["Sh"],
-    ThetaR= CalPar["ThetaR"],ThetaV= CalPar["ThetaV"],
-    S1fac= CalPar["S1fac"])
-
-  
-  OmnInp <- c(CalPar_lis,inp_dat,FixInp_lis)
-
-  mod_cmpl <- suppressWarnings(mod_fun(user=OmnInp)) # DDG:key part missing
-  y_c <- mod_cmpl$run(FixInp_lis$timestep)
-  
-  y_c <- data.frame(y_c)
-
-# model would predict average water column conc 
-y_c$C1 <- (y_c$M1)/inp_dat$V1t
-y_c$C2 <- (y_c$M2)/inp_dat$V2t
-y_c$C3 <- (y_c$M3)/inp_dat$V3t
-y_c$C4 <- (y_c$M4)/inp_dat$V4t
-
-#..........................
-
-#get modifiers to convert avg conc to surf
-CoAdj2 <- inp_dat$V2t/(inp_dat$V2t+inp_dat$V2downt*(-1+FixInp_lis$Rbs2[inp_dat$mot])) 
-CoAdj3 <- inp_dat$V3t/(inp_dat$V3t+inp_dat$V3downt*(-1+FixInp_lis$Rbs3[inp_dat$mot])) 
-CoAdj4 <- inp_dat$V4t/(inp_dat$V4t+inp_dat$V4downt*(-1+FixInp_lis$Rbs4[inp_dat$mot])) 
-
-
-#obtain surface concentrations, useful to compare model and surface data
-  y_c$C2sur=y_c$C2*CoAdj2
-  y_c$C3sur=y_c$C3*CoAdj3
-  y_c$C4sur=y_c$C4*CoAdj4
-
-  #record month
-  y_c$mo <- inp_dat$mot
-
-  return(y_c %>% as_tibble())
-}
-
-############################################################
-# predict chl+Err based on inputs and right regression model
-nut2Echl <- function(inpV,Amod=AllSegModDat)
-{
-  pos_Cmod <- intersect(which(ordeComb$segm==inpV['segm'][[1]]),
-  which(ordeComb$seas==(inpV['seas'][[1]])))
-  r_np <<- Amod[[pos_Cmod]]$br %>% as.numeric()
-  Cmod <- Amod[[pos_Cmod]]$Smod
-  LMls <- predict(Cmod,inpV,se.fit=T) 
-  
-  yi <- (LMls$fit+rnorm(1,0,LMls$se.fit)+rnorm(1,0,LMls$residual.scale))%>% 
-    `^`(10,.)
-  return(yi)
-}
-
-
-
-
-
-############################################################
-# predict chl+two types of errors (ie. creates double output) based on inputs and right regression model
-nut2EchlDO <- function(inpV,Amod=AllSegModDat)
-{
-  pos_Cmod <- intersect(which(ordeComb$segm==inpV['segm'][[1]]),
-  which(ordeComb$seas==(inpV['seas'][[1]])))
-  r_np <<- Amod[[pos_Cmod]]$br %>% as.numeric()
-  Cmod <- Amod[[pos_Cmod]]$Smod
-  LMls <- predict(Cmod,inpV,se.fit=T) 
-  trnsYpar <- LMls$fit+rnorm(1,0,LMls$se.fit)
-  yiSamp <- (trnsYpar)%>%`^`(10,.) # param error due to "sampling"
-  yiPred <- (trnsYpar+rnorm(1,0,LMls$residual.scale))%>% 
-    `^`(10,.) # total error
-  return(c(yiSamp,yiPred))
-}
-
-
-
 
 
 ######################################################
@@ -568,10 +433,6 @@ CoAdj4 <- inp_dat$V4t/(inp_dat$V4t+inp_dat$V4downt*(-1+FixInp_lis$Rbs4))
 
   return(y_c %>% as_tibble())
 }
-
-
-
-
 
 
 ######################################################################
