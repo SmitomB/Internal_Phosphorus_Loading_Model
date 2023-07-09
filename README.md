@@ -6,19 +6,21 @@ This repository contains the data and code used in the paper "Characterizing and
 | Sub-repositories | Description|
 |:--------------------|:------------------------|
 |DataFiles| Data files such as .csv, .xlsx, .txt are stored in this folder.|
-|Pmodels| All the models are stored in this folder. |
-|RWorkSpaces| R workspaces used to run the model.|
-|OutputFiles| Contains the html versions of the P models|
+|Pmodels| All model codes are stored in this folder. |
+|RWorkSpaces| R workspaces required to run the model.|
+|OutputFiles| Contains the output data from the P models.|
 
 <h2 align="left">Prerequisites to run the model</h2>
 
 <h3 align="left">GitHub Account</h3>
 
-To run this model, you will need a GitHub account. The details of creating a new GitHub account can be easily found over the internet.
+A _GitHub_ account is required to run the model. The details of creating a new _GitHub_ account can be easily found over the internet.
 
 <h3 align="left">Installations and setup</h3>
 
-Install Git, R, and RStudio from respective websites. To link Git to RStudio, open RStudio and go to _Tools_ > _Global Options…_ click on _Git/SVN_. Check _Enable version control interface for RStudio projects_. Set the path to the Git executable that was installed. Click _OK_ and restart Rstudio. If done correctly, the Git icon will appear on the RStudio toolbar. Next, configure Git and set your user name and email (the email address you used to register on GitHub). You can directly open the Git prompt from within RStudio. User name and email needs to be set only once. Go to Tools > Shell to open the Git Shell to tell Git your username and GitHub email.
+Install _Git_, _R_, and _RStudio_ from respective websites. </br>
+
+To link _Git_ to _RStudio_, open _RStudio_ and go to _Tools_ > _Global Options…_ click on _Git/SVN_. Check _Enable version control interface for RStudio projects_. Set the path to the _Git executable_ that was installed. Click _OK_ and restart _Rstudio_. If done correctly, the _Git_ icon will appear on the _RStudio_ toolbar. Next, configure _Git_ and set your user name and email (the email address you used to register on GitHub). You can directly open the _Git_ prompt from within _RStudio_. User name and email needs to be set only once. Go to _Tools_ > _Shell_ to open the Git Shell to tell Git your username and _GitHub_ email.
 
 <h2 align="left">How to run the model</h2>
 
