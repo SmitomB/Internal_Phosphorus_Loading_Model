@@ -1,5 +1,5 @@
 <h1 align = "left"> Pmodels </h1>
-The repository contains all codes used the model and carry out additional analysis. Brief description of the files are mentioned below.
+This repository contains all codes used to run the model and carry out additional analysis. Brief description of the files are mentioned below.
 
 # Description of the Files
 |File|Description|
