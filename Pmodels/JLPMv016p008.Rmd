@@ -1,6 +1,6 @@
 ---
 title: "Jordan Lake Reservoir Model"
-subtitle: "Part8: Management scenarios - 1"
+subtitle: "Part8: Management scenarios"
 author: "Smitom Borah"
 date: "04/29/2023"
 output: 
@@ -47,11 +47,8 @@ h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this t
 Time required to run the entire notebook: ~ 18 hrs
 
 # Motivation
-In this notebook, we visualize the future trends of TP in water and sediment columns under different management scenarios under RCP 8.5. 
+In this notebook, we simulate the future trends of TP in water and sediment columns under different management scenarios under RCP 8.5. 
 
-
-# Edit log
-No new edit since creation
 
 # Loading packages
 Following packages were used in this notebook.
@@ -113,9 +110,12 @@ MA14func <- function(x){
 ## function to create bottom to surface P ratios in the forcast loop
 ### Cannot be tested outside the loop
 Pratios.fun <- function(smplyrvec, bt.df = AvgT_85.35ma.d, st.df = AvgT_85.14ma.d, PinpDFall.df = PinpDFall){
+  #----------------------------------------------------------------------
+  # Argument list:
   # smplyrvec ->  vector of sampled historical years for historical data in the prediction years
   # bt.df -> data frame of daily 35d moving average of air temperature from 32 GCFs (bottom temp)
   # st.df -> data frame of daily 35d moving average of air temperature from 32 GCFs (surface temp)
+  #----------------------------------------------------------------------
 
   WS.df <- WS.func(Smpleyr = smplyrvec)
     
@@ -134,7 +134,8 @@ Pratios.fun <- function(smplyrvec, bt.df = AvgT_85.35ma.d, st.df = AvgT_85.14ma.
     
   # Create DateTime object for entire duration
   hypo.p.o.r <- data.frame(Date = seq(as.Date(date.cali.daily[1]), as.Date(date.pred.daily[length(date.pred.daily)]),  by = "1 day"))
-  # merging
+ 
+   # merging
   hypo.PinpDFall <- merge(hypo.p.o.r, hypo.PinpDFall, by = "Date", all.x = T)
   
   # Filling the daily values from the monthly values
@@ -268,7 +269,7 @@ date_scen <- floor_date(seq(ymd('2019-01-01'),ymd('2090-12-01'), by = 'month'), 
 ```
 
 # Wind speed
-It was found in one of the previous file that downscaled winds speed data set was inadequate. So, we used the the randomly sampled windspeed data from historical records (1999-2018) to create future simulations. Here. we develop a function to create a data frame of windspeed in the future forecasting loop.
+We used the the randomly sampled windspeed data from historical records (1999-2018) to create future simulations. Here. we develop a function to create a data frame of windspeed in the future forecasting loop.
 
 ```{r Windspeed data, echo=TRUE, message=FALSE, warning=FALSE}
 # year range for historical simulation
@@ -349,18 +350,10 @@ WS.func <- function(obsWS = RDU_wind,
 
 # Checking the function
 WindSpeed <- WS.func()
-
-### Daily variation
-ggplot(WindSpeed, aes(x = Date, y = `Average Wind Speed (ms)`))+
-  geom_point(color = "red")+
-  # geom_line()+
-  labs(x = "Date",
-       y = "Daily wind speed (m/s)")+
-  theme_bw()
 ```
 
 # Air temperature
-```{r}
+```{r message=FALSE, warning=FALSE}
 # Loading minimum temperature data----
 ## 1980-2050
 MinT_85_raw1 <- read.csv("DataFiles/Loca_Temp_min_85.csv", header = TRUE)
@@ -487,21 +480,18 @@ AvgMoP.df<- data.frame(Segment = c(1,2,3,4), Avg.P.Mass_kg_mo = c(meanM1, meanM2
 AvgMoP.df
 ```
 
+
+# Combination 1: No external loading reduction + No internal loading reduction
+## Inputs
+In this section, we specify the inputs required to run the model
 ```{r}
 # Number of posterior parameter samples
 N <- 1000
 ```
 
-
-# Combination 1: No external loading reduction + No internal loading reduction
-## Inputs
-In this section, we specify the inputs required to run the model
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 # Percentage reduction in external P loading
 exPH00 <- -0
-
-# Number of posterior parameter samples
-# N <- 100
 
 # percentage of Sediment P release allowed
 inPH00 <- 100
@@ -546,8 +536,8 @@ PinpDF <- merge(PinpDF,hypo.midDepth,by = "Date", all.x = T )
 
 # Setting seed
 set.seed(500)
+
 # sampling set of posterior samples 
-# postPsmpl <- RAM$samples[seq((nrow(RAM$samples)-20000),nrow(RAM$samples),length.out =N),]
 postPsmpl <- RAM$samples[sample(seq((nrow(RAM$samples)-25000),nrow(RAM$samples)), N, replace = F),]
 
 
@@ -579,10 +569,8 @@ predDFH00 <- meanDFH00
 ```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 start.time = Sys.time()
 
-# loop.seed <- sample(seq(1000,5000, by = 1 ), N)
 for (i in 1:N){
-  
-  # i <- 1
+
   # Selecting the nutrient scenario and parameter set
   EP_red <-  meanDFH00[i, "sce_j"][[1]]
   parPi <- postPsmpl[meanDFH00[i, "par_i"][[1]],]
@@ -645,7 +633,6 @@ for (i in 1:N){
   PinpDFall$year <- year(PinpDFall$Date)
   
   # Arranging the calibration dataset 
-  # PinpCaSc1 <- PinpDF %>% creaInp(.,tlim=nrow(.))
   PinpCaSc1 <- PinpDFall[(1:(nrow(PinpDF)+1)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp1$timestep <- 1:length(PinpCaSc1$A1t)
   Pico_tmp1$Rbs2 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
@@ -719,7 +706,7 @@ time.taken
 ```
 
 ## TP projections
-```{r}
+```{r message=FALSE, warning=FALSE}
 # test
 # x <- PI_rangefunc("C1")
 
@@ -731,56 +718,8 @@ CI_TP1_H00 <- PI_rangefunc("C1")
 sedP_H00 <- PI_rangefunc("Sconc")
 ```
 
-## TP in segment 1
-```{r}
-ggplot(data = CI_TP1_H00)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median TP"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+ 
-  # geom_point(aes(x = cale_date, y = TPugL, color = "Observed TP"), alpha = 0.4)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 700))+scale_y_continuous(expand = c(0, 0))+
-  theme(legend.position = c(0.70, 0.80))+
-  geom_vline(xintercept = ymd('2018-12-01'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median TP` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("TP ["*mu*g/l*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")+
-  labs(title = "Segment 1")
-```
-
-## Sediment P concentration
-```{r}
-ggplot(data = sedP_H00)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median sediment P"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 300))+scale_y_continuous(expand = c(0, 0))+
-  geom_vline(xintercept = ymd('2018-12-15'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median sediment P` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("P ["*g/m^2*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")
-```
-
 # Temporary save
 ```{r tmp 1, echo=TRUE, message=FALSE, warning=FALSE}
-# Saving the file
 # Saving the file [06-05-2023 04:30 PM] 
 save.image("RWorkSpaces/JLPMv016p008_tmp1.RData")
 
@@ -791,12 +730,9 @@ save.image("RWorkSpaces/JLPMv016p008_tmp1.RData")
 # Combination 2: 50% external loading reduction + No internal loading reduction
 ## Inputs
 In this section, we specify the inputs required to run the model
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 # Percentage reduction in external P loading
 exPH500 <- -50
-
-# Number of posterior parameter samples
-# N <- 100
 
 # percentage of Sediment P release allowed
 inPH500 <- 100
@@ -842,7 +778,6 @@ PinpDF <- merge(PinpDF,hypo.midDepth,by = "Date", all.x = T )
 # Setting seed
 set.seed(500)
 # sampling set of posterior samples 
-# postPsmpl <- RAM$samples[seq((nrow(RAM$samples)-20000),nrow(RAM$samples),length.out =N),]
 postPsmpl <- RAM$samples[sample(seq((nrow(RAM$samples)-25000),nrow(RAM$samples)), N, replace = F),]
 
 
@@ -874,10 +809,8 @@ predDFH500 <- meanDFH500
 ```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 start.time = Sys.time()
 
-# loop.seed <- sample(seq(1000,5000, by = 1 ), N)
 for (i in 1:N){
-  
-  # i <- 1
+
   # Selecting the nutrient scenario and parameter set
   EP_red <-  meanDFH500[i, "sce_j"][[1]]
   parPi <- postPsmpl[meanDFH500[i, "par_i"][[1]],]
@@ -940,7 +873,6 @@ for (i in 1:N){
   PinpDFall$year <- year(PinpDFall$Date)
   
   # Arranging the calibration dataset 
-  # PinpCaSc1 <- PinpDF %>% creaInp(.,tlim=nrow(.))
   PinpCaSc1 <- PinpDFall[(1:(nrow(PinpDF)+1)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp1$timestep <- 1:length(PinpCaSc1$A1t)
   Pico_tmp1$Rbs2 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
@@ -1013,7 +945,7 @@ time.taken
 ```
 
 ## TP projections
-```{r}
+```{r message=FALSE, warning=FALSE}
 # test
 # x <- PI_rangefunc("C1")
 
@@ -1025,71 +957,22 @@ CI_TP1_H500 <- PI_rangefunc("C1", meanDF = meanDFH500, predDF = predDFH500)
 sedP_H500 <- PI_rangefunc("Sconc", meanDF = meanDFH500, predDF = predDFH500)
 ```
 
-## TP in segment 1
-```{r}
-ggplot(data = CI_TP1_H500)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median TP"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+ 
-  # geom_point(aes(x = cale_date, y = TPugL, color = "Observed TP"), alpha = 0.4)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 700))+scale_y_continuous(expand = c(0, 0))+
-  theme(legend.position = c(0.70, 0.80))+
-  geom_vline(xintercept = ymd('2018-12-01'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median TP` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("TP ["*mu*g/l*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")+
-  labs(title = "Segment 1")
-```
 
-## Sediment P concentration
-```{r}
-ggplot(data = sedP_H500)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median sediment P"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 300))+scale_y_continuous(expand = c(0, 0))+
-  geom_vline(xintercept = ymd('2018-12-15'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median sediment P` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("P ["*g/m^2*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")
-```
+
+
 # Temporary save
 ```{r tmp 2, echo=TRUE, message=FALSE, warning=FALSE}
-# Saving the file
 # Saving the file [06-05-2023 04:30 PM] 
 save.image("RWorkSpaces/JLPMv016p008_tmp1.RData")
-
-gc()
 ```
 
 
 # Combination 3: 50% external loading reduction + 50% internal loading reduction
 ## Inputs
 In this section, we specify the inputs required to run the model
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 # Percentage reduction in external P loading
 exPH5050 <- -50
-
-# Number of posterior parameter samples
-# N <- 100
 
 # percentage of Sediment P release allowed
 inPH5050 <- 50
@@ -1135,7 +1018,6 @@ PinpDF <- merge(PinpDF,hypo.midDepth,by = "Date", all.x = T )
 # Setting seed
 set.seed(500)
 # sampling set of posterior samples 
-# postPsmpl <- RAM$samples[seq((nrow(RAM$samples)-20000),nrow(RAM$samples),length.out =N),]
 postPsmpl <- RAM$samples[sample(seq((nrow(RAM$samples)-25000),nrow(RAM$samples)), N, replace = F),]
 
 
@@ -1167,10 +1049,8 @@ predDFH5050 <- meanDFH5050
 ```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 start.time = Sys.time()
 
-# loop.seed <- sample(seq(1000,5000, by = 1 ), N)
 for (i in 1:N){
-  
-  # i <- 1
+
   # Selecting the nutrient scenario and parameter set
   EP_red <-  meanDFH5050[i, "sce_j"][[1]]
   parPi <- postPsmpl[meanDFH5050[i, "par_i"][[1]],]
@@ -1232,8 +1112,7 @@ for (i in 1:N){
   # Correcting the years
   PinpDFall$year <- year(PinpDFall$Date)
   
-    # Arranging the calibration dataset 
-  # PinpCaSc1 <- PinpDF %>% creaInp(.,tlim=nrow(.))
+  # Arranging the calibration dataset 
   PinpCaSc1 <- PinpDFall[(1:(nrow(PinpDF)+1)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp1$timestep <- 1:length(PinpCaSc1$A1t)
   Pico_tmp1$Rbs2 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
@@ -1306,7 +1185,7 @@ time.taken
 ```
 
 ## TP projections
-```{r}
+```{r message=FALSE, warning=FALSE}
 # test
 # x <- PI_rangefunc("C1")
 
@@ -1318,59 +1197,12 @@ CI_TP1_H5050 <- PI_rangefunc("C1", meanDF = meanDFH5050, predDF = predDFH5050)
 sedP_H5050 <- PI_rangefunc("Sconc", meanDF = meanDFH5050, predDF = predDFH5050)
 ```
 
-## TP in segment 1
-```{r}
-ggplot(data = CI_TP1_H5050)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median TP"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+ 
-  # geom_point(aes(x = cale_date, y = TPugL, color = "Observed TP"), alpha = 0.4)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 700))+scale_y_continuous(expand = c(0, 0))+
-  theme(legend.position = c(0.70, 0.80))+
-  geom_vline(xintercept = ymd('2018-12-01'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median TP` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("TP ["*mu*g/l*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")+
-  labs(title = "Segment 1")
-```
 
-## Sediment P concentration
-```{r}
-ggplot(data = sedP_H5050)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median sediment P"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 300))+scale_y_continuous(expand = c(0, 0))+
-  geom_vline(xintercept = ymd('2018-12-15'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median sediment P` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("P ["*g/m^2*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")
-```
 # Temporary save
 ```{r tmp 3, echo=TRUE, message=FALSE, warning=FALSE}
-# Saving the file
 # Saving the file [06-05-2023 04:30 PM] 
 save.image("RWorkSpaces/JLPMv016p008_tmp1.RData")
 
-gc()
 ```
 
 
@@ -1380,9 +1212,6 @@ In this section, we specify the inputs required to run the model
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Percentage reduction in external P loading
 exPH050 <- -0
-
-# Number of posterior parameter samples
-# N <- 100
 
 # percentage of Sediment P release allowed
 inPH050 <- 50
@@ -1428,7 +1257,6 @@ PinpDF <- merge(PinpDF,hypo.midDepth,by = "Date", all.x = T )
 # Setting seed
 set.seed(500)
 # sampling set of posterior samples 
-# postPsmpl <- RAM$samples[seq((nrow(RAM$samples)-20000),nrow(RAM$samples),length.out =N),]
 postPsmpl <- RAM$samples[sample(seq((nrow(RAM$samples)-25000),nrow(RAM$samples)), N, replace = F),]
 
 
@@ -1460,10 +1288,8 @@ predDFH050 <- meanDFH050
 ```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 start.time = Sys.time()
 
-# loop.seed <- sample(seq(1000,5000, by = 1 ), N)
 for (i in 1:N){
-  
-  # i <- 1
+
   # Selecting the nutrient scenario and parameter set
   EP_red <-  meanDFH050[i, "sce_j"][[1]]
   parPi <- postPsmpl[meanDFH050[i, "par_i"][[1]],]
@@ -1526,7 +1352,6 @@ for (i in 1:N){
   PinpDFall$year <- year(PinpDFall$Date)
   
   # Arranging the calibration dataset 
-  # PinpCaSc1 <- PinpDF %>% creaInp(.,tlim=nrow(.))
   PinpCaSc1 <- PinpDFall[(1:(nrow(PinpDF)+1)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp1$timestep <- 1:length(PinpCaSc1$A1t)
   Pico_tmp1$Rbs2 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
@@ -1540,7 +1365,7 @@ for (i in 1:N){
     `colnames<-`(substring(colnames(.),1,2)) %>%
     add_column(.,cale_date=c(date_cali, date_scen[1]))
   
-   # Model run for the future projections
+  # Model run for the future projections
   PinpCaSc2 <- PinpDFall[((nrow(PinpDF)+1):nrow(PinpDFall)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp2$timestep <- 1:length(PinpCaSc2$A1t)
   Pico_tmp2$Rbs2 <- BotSutPrat[[1]]$Rbs2[(nrow(PinpDF)+1):nrow(PinpDFall)]
@@ -1598,7 +1423,7 @@ time.taken
 ```
 
 ## TP projections
-```{r}
+```{r message=FALSE, warning=FALSE}
 # test
 # x <- PI_rangefunc("C1")
 
@@ -1610,59 +1435,12 @@ CI_TP1_H050 <- PI_rangefunc("C1", meanDF = meanDFH050, predDF = predDFH050)
 sedP_H050 <- PI_rangefunc("Sconc", meanDF = meanDFH050, predDF = predDFH050)
 ```
 
-## TP in segment 1
-```{r}
-ggplot(data = CI_TP1_H050)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median TP"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+ 
-  # geom_point(aes(x = cale_date, y = TPugL, color = "Observed TP"), alpha = 0.4)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 700))+scale_y_continuous(expand = c(0, 0))+
-  theme(legend.position = c(0.70, 0.80))+
-  geom_vline(xintercept = ymd('2018-12-01'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median TP` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("TP ["*mu*g/l*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")+
-  labs(title = "Segment 1")
-```
 
-## Sediment P concentration
-```{r}
-ggplot(data = sedP_H050)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median sediment P"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 300))+scale_y_continuous(expand = c(0, 0))+
-  geom_vline(xintercept = ymd('2018-12-15'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median sediment P` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("P ["*g/m^2*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")
-```
 # Temporary save
 ```{r tmp 4, echo=TRUE, message=FALSE, warning=FALSE}
-# Saving the file
 # Saving the file [06-05-2023 04:30 PM] 
 save.image("RWorkSpaces/JLPMv016p008_tmp1.RData")
 
-gc()
 ```
 
 # Combination 5: Dredging with no  external loading reduction
@@ -1671,9 +1449,6 @@ In this section, we specify the inputs required to run the model
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Percentage reduction in external P loading
 exPH050d <- -0
-
-# Number of posterior parameter samples
-# N <- 100
 
 # percentage of Sediment P release allowed
 inPH050d <- 100
@@ -1722,7 +1497,6 @@ PinpDF <- merge(PinpDF,hypo.midDepth,by = "Date", all.x = T )
 # Setting seed
 set.seed(500)
 # sampling set of posterior samples 
-# postPsmpl <- RAM$samples[seq((nrow(RAM$samples)-20000),nrow(RAM$samples),length.out =N),]
 postPsmpl <- RAM$samples[sample(seq((nrow(RAM$samples)-25000),nrow(RAM$samples)), N, replace = F),]
 
 
@@ -1754,10 +1528,8 @@ predDFH050d <- meanDFH050d
 ```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 start.time = Sys.time()
 
-# loop.seed <- sample(seq(1000,5000, by = 1 ), N)
 for (i in 1:N){
-  
-  # i <- 1
+
   # Selecting the nutrient scenario and parameter set
   EP_red <-  meanDFH050d[i, "sce_j"][[1]]
   parPi <- postPsmpl[meanDFH050d[i, "par_i"][[1]],]
@@ -1822,8 +1594,7 @@ for (i in 1:N){
   # Correcting the years
   PinpDFall$year <- year(PinpDFall$Date)
   
-    # Arranging the calibration dataset 
-  # PinpCaSc1 <- PinpDF %>% creaInp(.,tlim=nrow(.))
+  # Arranging the calibration dataset 
   PinpCaSc1 <- PinpDFall[(1:(nrow(PinpDF)+1)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp1$timestep <- 1:length(PinpCaSc1$A1t)
   Pico_tmp1$Rbs2 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
@@ -1837,7 +1608,7 @@ for (i in 1:N){
     `colnames<-`(substring(colnames(.),1,2)) %>%
     add_column(.,cale_date=c(date_cali, date_scen[1]))
   
-   # Model run for the future projections
+  # Model run for the future projections
   PinpCaSc2 <- PinpDFall[((nrow(PinpDF)+1):nrow(PinpDFall)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp2$timestep <- 1:length(PinpCaSc2$A1t)
   Pico_tmp2$Rbs2 <- BotSutPrat[[1]]$Rbs2[(nrow(PinpDF)+1):nrow(PinpDFall)]
@@ -1895,7 +1666,7 @@ time.taken
 ```
 
 ## TP projections
-```{r}
+```{r message=FALSE, warning=FALSE}
 # test
 # x <- PI_rangefunc("C1")
 
@@ -1907,59 +1678,11 @@ CI_TP1_H050d <- PI_rangefunc("C1", meanDF = meanDFH050d, predDF = predDFH050d)
 sedP_H050d <- PI_rangefunc("Sconc", meanDF = meanDFH050d, predDF = predDFH050d)
 ```
 
-## TP in segment 1
-```{r}
-ggplot(data = CI_TP1_H050d)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median TP"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+ 
-  # geom_point(aes(x = cale_date, y = TPugL, color = "Observed TP"), alpha = 0.4)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 700))+scale_y_continuous(expand = c(0, 0))+
-  theme(legend.position = c(0.70, 0.80))+
-  geom_vline(xintercept = ymd('2018-12-01'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median TP` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("TP ["*mu*g/l*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")+
-  labs(title = "Segment 1")
-```
 
-## Sediment P concentration
-```{r}
-ggplot(data = sedP_H050d)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median sediment P"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 300))+scale_y_continuous(expand = c(0, 0))+
-  geom_vline(xintercept = ymd('2018-12-15'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median sediment P` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("P ["*g/m^2*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")
-```
 # Temporary save
 ```{r tmp 5, echo=TRUE, message=FALSE, warning=FALSE}
-# Saving the file
 # Saving the file [06-05-2023 04:30 PM] 
 save.image("RWorkSpaces/JLPMv016p008_tmp1.RData")
-
-gc()
 ```
 
 # Combination 6: Dredging with 50%  external loading reduction
@@ -1969,8 +1692,6 @@ In this section, we specify the inputs required to run the model
 # Percentage reduction in external P loading
 exPH5050d <- -50
 
-# Number of posterior parameter samples
-# N <- 100
 
 # percentage of Sediment P release allowed
 inPH5050d <- 100
@@ -2019,7 +1740,6 @@ PinpDF <- merge(PinpDF,hypo.midDepth,by = "Date", all.x = T )
 # Setting seed
 set.seed(500)
 # sampling set of posterior samples 
-# postPsmpl <- RAM$samples[seq((nrow(RAM$samples)-20000),nrow(RAM$samples),length.out =N),]
 postPsmpl <- RAM$samples[sample(seq((nrow(RAM$samples)-25000),nrow(RAM$samples)), N, replace = F),]
 
 
@@ -2052,8 +1772,7 @@ predDFH5050d <- meanDFH5050d
 start.time = Sys.time()
 
 for (i in 1:N){
-  
-  # i <- 1
+
   # Selecting the nutrient scenario and parameter set
   EP_red <-  meanDFH5050d[i, "sce_j"][[1]]
   parPi <- postPsmpl[meanDFH5050d[i, "par_i"][[1]],]
@@ -2119,7 +1838,6 @@ for (i in 1:N){
   PinpDFall$year <- year(PinpDFall$Date)
   
   # Arranging the calibration dataset 
-  # PinpCaSc1 <- PinpDF %>% creaInp(.,tlim=nrow(.))
   PinpCaSc1 <- PinpDFall[(1:(nrow(PinpDF)+1)),] %>% creaInp(.,tlim=nrow(.))
   Pico_tmp1$timestep <- 1:length(PinpCaSc1$A1t)
   Pico_tmp1$Rbs2 <- Pico_tmp1$Rbs2[1:length(PinpCaSc1$A1t)]
@@ -2191,7 +1909,7 @@ time.taken
 ```
 
 ## TP projections
-```{r}
+```{r message=FALSE, warning=FALSE}
 # test
 # x <- PI_rangefunc("C1")
 
@@ -2203,60 +1921,17 @@ CI_TP1_H5050d <- PI_rangefunc("C1", meanDF = meanDFH5050d, predDF = predDFH5050d
 sedP_H5050d <- PI_rangefunc("Sconc", meanDF = meanDFH5050d, predDF = predDFH5050d)
 ```
 
-## TP in segment 1
-```{r}
-ggplot(data = CI_TP1_H5050d)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median TP"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+ 
-  # geom_point(aes(x = cale_date, y = TPugL, color = "Observed TP"), alpha = 0.4)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 700))+scale_y_continuous(expand = c(0, 0))+
-  theme(legend.position = c(0.70, 0.80))+
-  geom_vline(xintercept = ymd('2018-12-01'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median TP` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("TP ["*mu*g/l*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")+
-  labs(title = "Segment 1")
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Start timer
+End_timer8 <- Sys.time()
+
+# Total time taken to run the entire notebook
+Tot_time8 <- End_timer8 - Start_timer8
+Tot_time8
 ```
-
-## Sediment P concentration
-```{r}
-ggplot(data = sedP_H5050d)+
-  geom_line(aes(x = cale_date, y = `50%`, color = "Median sediment P"))+
-  geom_ribbon(aes(x = cale_date, ymin = `pred5%`, ymax = `pred95%`, fill = "90% PI"), alpha = 0.2)+
-  theme_bw()+xlab("")+
-  coord_cartesian(ylim=c(0, 300))+scale_y_continuous(expand = c(0, 0))+
-  geom_vline(xintercept = ymd('2018-12-15'),linetype ="dashed",size=.6)+
-  scale_fill_manual("",values=c("grey12"))+
-  scale_x_date(breaks = as.Date(c("1983-01-01", "2000-01-01", "2018-01-01", "2035-01-01", "2055-01-01", "2075-01-01", "2090-01-01")),date_labels = "%Y")+
-  scale_colour_manual(NULL,
-                      values=c(`Median sediment P` = "steelblue"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid"),
-                        shape = c(NA)))) + 
-  ylab(expression("P ["*g/m^2*"]"))+
-  xlab("Year")+
-  theme(text = element_text(size = 20),
-        legend.direction="horizontal",
-        legend.position = "bottom")
-```
-
-
-
-
 
 # Saving the workspace
 ```{r save file, echo=TRUE, message=FALSE, warning=FALSE}
-# Saving the file
 # Saving the file [06-06-2023 10:30 PM] 
 # save.image("RWorkSpaces/JLPMv016p008_1.RData")
 
@@ -2357,333 +2032,15 @@ P_s.modf <- merge(P_s.modf, sedP_H5050d[,comm_col.vars], by = "cale_date") %>% r
          "H5050d_pred95" = "pred95%")
 ```
 
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-# plots
-P_moPlot <- ggplot()+
-  geom_line(data = P_w.modf, aes(x = cale_date,
-                                 y = H00_50, color = "H00"))+
-  geom_line(data = P_w.modf, aes(x = cale_date,
-                                 y = H050_50, color = "H050"))+
-  geom_line(data = P_w.modf, aes(x = cale_date,
-                                 y = H050d_50, color = "H050d"))+
-  geom_line(data = P_w.modf, aes(x = cale_date,
-                                 y = H500_50, color = "H500"))+
-  geom_line(data = P_w.modf, aes(x = cale_date,
-                                 y = H5050_50, color = "H5050"))+
-  geom_line(data = P_w.modf, aes(x = cale_date,
-                                 y = H5050d_50, color = "H5050d"))
-P_moPlot
-```
-
-## Annual values
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-P_w.anndf <- P_w.modf %>% mutate(year = year(cale_date)) %>% group_by(year) %>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
-
-## Mitigation plan MP
-P_w.annPlot <- ggplot()+
-  geom_line(data = P_w.anndf, aes(x = year, y = H00_50, color = "50% ext P \n reduction"), size = 0.5)+
-  geom_line(data = P_w.anndf, aes(x = year, y = H050_50, color = "Approach I: \n 50% int P reduction"), size = 0.5)+
-  geom_line(data = P_w.anndf, aes(x = year, y = H5050_50, color = "Approach I: \n 50% (ext P + int P) reduction"), size = 0.5)+
-  geom_line(data = P_w.anndf, aes(x = year, y = H500_50, color = "Approach II: \n 50% int P reduction"), size = 0.5)+
-  geom_line(data = P_w.anndf, aes(x = year, y = H050d_50, color = "Approach II: \n 50% (ext P + int P) reduction"), size = 0.5)+
-  geom_line(data = P_w.anndf, aes(x = year, y = H5050d_50, color = "No reduction"), size = 0.5)+
-  
-  geom_vline(xintercept = year(as.Date('2018-12-01')),linetype ="dashed",size=.6)+
-  theme_bw()+
-  xlab("")+
-  scale_y_continuous(expand = c(0, 0), limits = c(0,300), breaks = seq(0,300, by = 50))+
-  scale_colour_manual(NULL,
-                      values=c(`Approach I: \n 50% int P reduction` = "blue",
-                               `Approach I: \n 50% (ext P + int P) reduction` = "red",
-                               `Approach II: \n 50% int P reduction` = "green",
-                               `Approach II: \n 50% (ext P + int P) reduction` = "purple",
-                               `50% ext P \n reduction` = "brown",
-                               `No reduction` = "black"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c("solid", "solid","solid","solid","solid", "solid"),
-                        shape = c(NA, NA,NA,NA,NA, NA),
-                        size = c(1,1,1,1,1,1)),
-                        ncol = 1,
-                        nrow = 6)) + 
-  ylab(expression(Average~total~phosphorus~"("*mu*g/L*")"))+
-  xlab("Year")+
-  theme(legend.position = "none",
-        legend.background = element_blank(),
-        # panel.grid.major = element_blank(), 
-        # panel.grid.minor = element_blank(),
-        legend.text.align = 0,
-        text = element_text(size = 18),
-        legend.text = element_text(size = 18))+
-  labs(title = "Segment 1")
-
-P_w.annPlot
-```
-
-```{r}
-# Water-column P plot
-P_w.annPlot1 <- ggplot(data = P_w.anndf)+
-  geom_line(aes(x = year, y = H500_50, color = "H500"), size = 1, lty = 2)+
-  geom_line(aes(x = year, y = H050_50, color = "H050"), size = 1, lty = 3)+
-  geom_line(aes(x = year, y = H5050_50, color = "H5050"), size = 1, lty = 5)+
-  geom_line(aes(x = year, y = H050d_50, color = "H050d"), size = 1, lty = 4)+
-  geom_line(aes(x = year, y = H5050d_50, color = "H5050d"), size = 1, lty = 6)+
-  geom_line(aes(x = year, y = H00_50, color = "H00"), size = 1, lty = 1)+
-  scale_colour_manual(NULL,
-                      aesthetics = c("color","fill"),
-                      values=c(H00 = "black",
-                               H500 = "blue",
-                               H050 = "brown",
-                               H050d = "lime green",
-                               H5050 = "red",
-                               H5050d = "orange"),
-                      labels = c("1: No reduction",
-                                 "2: -50% EPL",
-                                 "3: -50% IPL (C)",
-                                 "4: -50% IPL (D)",
-                                 "5: -50% (IPL + EPL) (C)",
-                                 "6: -50% (IPL + EPL) (D)"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c(1,2,3,4,5,6),
-                        color = c("black", "blue", "brown","lime green", "red", "orange"),
-                        shape = c(NA, NA, NA,NA, NA, NA)),
-                        size = c(2,2,2,2,2,2),
-                        nrow = 3,
-                        ncol = 3))+
-  theme_bw()+
-  labs(x = "Year",
-      y = expression(P[w]~"("*mu*g/L*")"))+
-  theme(
-    panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        legend.background = element_rect(fill = "transparent"),
-        legend.text.align = 0,
-        text = element_text(size = 10),
-        plot.margin = unit(c(5,12,5,5), "points"),
-        legend.text = element_text(size = 10),
-        legend.title = element_blank(),
-        legend.key = element_rect(fill = "transparent"),
-        legend.direction="horizontal",
-        legend.position = c(0.56,0.7),
-        # legend.position = "none",
-        axis.text = element_text(size = 10, color = "black"),
-        axis.title = element_text(size = 10, color = "black"),
-        axis.ticks = element_line(color = "black"))+
-  scale_y_continuous(limits = c(0,270),expand = c(0, 0))+
-  scale_x_continuous(breaks = c( 1983,2000, 2018, 2050, 2090),expand = c(0, 0))
-
-P_w.annPlot1
 
 
-# Colored plot
-# png(file="OutputFiles/JLPMv016_TPManProj_plot_colored.png",width = 6, height = 3, units = 'in', res = 1200)
-# P_w.annPlot1
-# dev.off()
-```
-
-```{r}
-P_s.anndf <- P_s.modf %>% mutate(year = year(cale_date)) %>% group_by(year) %>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
 
 
-# Sediment P plot
-P_s.annPlot1 <- ggplot(data = P_s.anndf)+
-  geom_line(aes(x = year, y = H500_50, color = "H500"), size = 1, lty = 2)+
-  geom_line(aes(x = year, y = H050_50, color = "H050"), size = 1, lty = 3)+
-  geom_line(aes(x = year, y = H5050_50, color = "H5050"), size = 1, lty = 5)+
-  geom_line(aes(x = year, y = H050d_50, color = "H050d"), size = 1, lty = 4)+
-  geom_line(aes(x = year, y = H5050d_50, color = "H5050d"), size = 1, lty = 6)+
-  geom_line(aes(x = year, y = H00_50, color = "H00"), size = 1, lty = 1)+
-  scale_colour_manual(NULL,
-                      aesthetics = c("color","fill"),
-                      values=c(H00 = "black",
-                               H500 = "blue",
-                               H050 = "brown",
-                               H050d = "lime green",
-                               H5050 = "red",
-                               H5050d = "orange"),
-                      labels = c("1: No reduction",
-                                 "2: -50% EPL",
-                                 "3: -50% IPL (C)",
-                                 "4: -50% IPL (D)",
-                                 "5: -50% (IPL + EPL) (C)",
-                                 "6: -50% (IPL + EPL) (D)"),
-                      guide = guide_legend(override.aes = list(
-                        linetype = c(1,2,3,4,5,6),
-                        color = c("black", "blue", "brown","lime green", "red", "orange"),
-                        shape = c(NA, NA, NA,NA, NA, NA)),
-                        size = c(2,2,2,2,2,2),
-                        nrow = 3,
-                        ncol = 3))+
-  theme_bw()+
-  labs(x = "Year",
-      y = expression(P[s]~"("*g/m^2*")"))+
-  theme(
-    panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        legend.background = element_rect(fill = "transparent"),
-        legend.text.align = 0,
-        text = element_text(size = 10),
-        plot.margin = unit(c(5,12,5,5), "points"),
-        legend.text = element_text(size = 10),
-        legend.title = element_blank(),
-        legend.key = element_rect(fill = "transparent"),
-        legend.direction="horizontal",
-        # legend.position = c(0.55,0.8),
-        legend.position = "none",
-        axis.text = element_text(size = 10, color = "black"),
-        axis.title = element_text(size = 10, color = "black"),
-        axis.ticks = element_line(color = "black"))+
-  scale_y_continuous(limits = c(0,100),breaks = c(0,25,50,75),expand = c(0, 0))+
-  scale_x_continuous(breaks = c( 1983,2000, 2018, 2050, 2090),expand = c(0, 0))
-
-P_s.annPlot1
-
-# Colored plot
-# png(file="OutputFiles/JLPMv016_SedPManProj_plot_colored.png",width = 6, height = 3, units = 'in', res = 1200)
-# P_s.annPlot1
-# dev.off()
-
-```
 
 
-```{r}
-# gridtext
-yleft <- textGrob("",
-                  rot = 90, gp = gpar(fontsize = 10))
-
-yright <- textGrob(expression(P~"in"~sediments~(g/m^2)),
-                   rot = 270, gp = gpar(fontsize = 10))
-
-bottom <- textGrob("Years", gp = gpar(fontsize = 10, col="black"))
-
-Pw_Ps_plot <- { 
-  wrap_elements(yleft) +
-    {{P_w.annPlot1 / P_s.annPlot1}}  +
-    # wrap_elements(yright) +
-    plot_layout(widths=c(.1,18)) } 
-  plot_layout(heights=c(98,4))
-
-Pw_Ps_plot
-
-# Saving the plot
-ggsave("OutputFiles/JLPMv016_PwPs_plot.png",Pw_Ps_plot,
-       height=7,width=7,units='in',dpi=1200)
-dev.off()
-```
 
 
-# Some comparisons
-## water-column P
 
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-# Annual values between study period: 2009-2018 (table 1)
-P_w.anndf.comp1 <- P_w.anndf[which(P_w.anndf$year %in% c((seq(2009,2018)))),] %>% mutate(Period = rep("Study", 10))
-P_w.anndf.comp1
 
-# Annual values between projection period: 2081-2090 (table 2)
-P_w.anndf.comp2 <- P_w.anndf[which(P_w.anndf$year %in% c((seq(2081,2090)))),] %>% mutate(Period = rep("Project", 10))
-P_w.anndf.comp2
 
-# Annual values between projection period: 2019-2028 (table 3)
-P_w.anndf.comp3 <- P_w.anndf[which(P_w.anndf$year %in% c((seq(2019,2028)))),] %>% mutate(Period = rep("Project", 10))
-P_w.anndf.comp3
 
-# decadal average
-## Study period: 2009-2018 (table 4)
-P_w.annvec10.comp1 <- P_w.anndf.comp1 %>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
-P_w.annvec10.comp1
-
-## Projection period, last decade: 2081-2090 (table 5)
-P_w.annvec10.comp2 <- P_w.anndf.comp2%>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
-P_w.annvec10.comp2
-
-## Projection period, first decade: 2019-2028 (table 6)
-P_w.annvec10.comp3 <- P_w.anndf.comp3%>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
-P_w.annvec10.comp3
-
-# Percentage reductions
-## last decades of study and projection period (table 7)
-P_w.annvec10.comp12 <- ((P_w.annvec10.comp1-P_w.annvec10.comp2)/(P_w.annvec10.comp1))*100
-P_w.annvec10.comp12
-
-## last decade of study period and first 
-## decade of projection period (table 8)
-P_w.annvec10.comp13 <- ((P_w.annvec10.comp1-P_w.annvec10.comp3)/(P_w.annvec10.comp1))*100
-P_w.annvec10.comp13
-
-```
-
-## sediment P
-```{r}
-# Annual values between study period: 2009-2018 (table 1)
-P_s.anndf.comp1 <- P_s.anndf[which(P_s.anndf$year %in% c((seq(2009,2018)))),] %>% mutate(Period = rep("Study", 10))
-P_s.anndf.comp1
-
-# Annual values between projection period: 2081-2090 (table 2)
-P_s.anndf.comp2 <- P_s.anndf[which(P_s.anndf$year %in% c((seq(2081,2090)))),] %>% mutate(Period = rep("Project", 10))
-P_s.anndf.comp2
-
-# Annual values between projection period: 2019-2028 (table 3)
-P_s.anndf.comp3 <- P_s.anndf[which(P_s.anndf$year %in% c((seq(2019,2028)))),] %>% mutate(Period = rep("Project", 10))
-P_s.anndf.comp3
-
-# decadal average
-## Study period: 2009-2018 (table 4)
-P_s.annvec10.comp1 <- P_s.anndf.comp1 %>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
-P_s.annvec10.comp1
-
-## Projection period: 2081-2090 (table 5)
-P_s.annvec10.comp2 <- P_s.anndf.comp2%>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
-P_s.annvec10.comp2
-
-## Projection period: 2019-2028 (table 6)
-P_s.annvec10.comp3 <- P_s.anndf.comp3%>% summarise_at(vars(H00_50, H050_50, H050d_50, H500_50, H5050_50, H5050d_50), funs(mean))
-P_s.annvec10.comp3
-
-# Percentage reductions
-## last decades of study and projection period (table 7)
-P_s.annvec10.comp12 <- ((P_s.annvec10.comp1-P_s.annvec10.comp2)/(P_s.annvec10.comp1))*100
-P_s.annvec10.comp12
-
-## last decade of study period and first 
-## decade of projection period (table 8)
-P_s.annvec10.comp13 <- ((P_s.annvec10.comp1-P_s.annvec10.comp3)/(P_s.annvec10.comp1))*100
-P_s.annvec10.comp13
-```
-## Percentage reduction between 2018 and 2090 annual values
-```{r}
-# 50% external load reduction
-## 2018
-T_w.H500.2018 <- P_w.anndf[which(P_w.anndf$year == 2018),"H500_50"] # 70.10942
-T_w.H500.2018
-
-## 2090
-T_w.H500.2090 <- P_w.anndf[which(P_w.anndf$year == 2090),"H500_50"] # 42.81334
-T_w.H500.2090
-
-# % reduction
-((T_w.H500.2018 - T_w.H500.2090 )/T_w.H500.2018)*100 # 38.9
-```
-
-## Percentage reduction between 2019 and 2090 annual values
-```{r}
-# 50% external load reduction
-## 2019
-T_w.H500.2019 <- P_w.anndf[which(P_w.anndf$year == 2019),"H500_50"] # 70.10942
-T_w.H500.2019
-
-## 2090
-T_w.H500.2090 <- P_w.anndf[which(P_w.anndf$year == 2090),"H500_50"] # 42.81334
-T_w.H500.2090
-
-# % reduction
-((T_w.H500.2019 - T_w.H500.2090 )/T_w.H500.2019)*100 # 38.9
-```
-
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-# Start timer
-End_timer8 <- Sys.time()
-
-# Total time taken to run the entire notebook
-Tot_time8 <- End_timer8 - Start_timer8
-Tot_time8
-```

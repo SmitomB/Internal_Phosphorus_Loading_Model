@@ -52,18 +52,15 @@ h3.subtitle { /* Header 4 - and the subtitle, author and data headers use this t
 Time required to run the entire notebook: ~10 secs
 
 # Motivation
-In this notebook, we developed a random forest model that can be used to predict bottom to surface P ratio that is used to calculate the surface P concentration in the Jordan lake model. Most of the codes in this notebook is similar to the codes written in the notebook, *Additional025_Stratification_v02082022.Rmd*.
-
-# Edit log
-*No new edit since its creation.*
+In this notebook, we developed a random forest model that can be used to predict bottom to surface P ratio that is used to calculate the surface P concentration in the Jordan lake model. 
 
 # Introduction
 In this notebook, we develop the random forest model and visualize its performance in different segments.
 The random forest model was developed based on the following features:
 
 1. Average wind speed (m/s)
-2. 5weeks M.A. air temperature ($^\circ C$)
-3. 2weeks M.A. air temperature ($^\circ C$)
+2. 5weeks M.A. air temperature (deg. C)
+3. 2weeks M.A. air temperature (deg. C)
 4. Surface sampling depths (m)
 5. Bottom sampling depths (m)
 6. Month
@@ -90,8 +87,7 @@ library(randomForest)
 library(zoo)
 library(plotly)
 
-# Loading functions script created by Dario
-# suppressMessages(source("Pmodels/functionsJorLak_no19.R")) 
+# Loading functions 
 suppressMessages(source("Pmodels/JLPMfunv16p001.R"))
 ```
 # Data 
@@ -105,22 +101,18 @@ The temperature data is stored in the files:
 # Adding temperature data
 ## Simulated surface water temperature
 Sim_SurTemp <- read.csv("DataFiles/Sim_SurfaceWaterTemp_daily.csv") %>% drop_na()
-
 Sim_SurTemp <- Sim_SurTemp[,c("Date","Airtemp","AirTmp_14d", "WtrTemp_14d")]
 Sim_SurTemp$Date <- as.Date(Sim_SurTemp$Date)
 
 # Final data frame with daily 14 day M.A. air temperature 
-# (as substitute for surface water temperature)
 Sim_SurTemp <- rename(Sim_SurTemp, AirTemp = Airtemp, SurfaceTemp = AirTmp_14d)
 
 ## Simulated bottom water temperature
 Sim_BotTemp <- read.csv("DataFiles/Sim_BottomWaterTemp_daily.csv") %>% drop_na()
-
 Sim_BotTemp <- Sim_BotTemp[,c("Date","AirTmp_35d", "WtrTemp_35d")]
 Sim_BotTemp$Date <- as.Date(Sim_BotTemp$Date, format = "%m/%d/%Y")
 
 # Final data frame with daily 35 day M.A. air temperature 
-# (as substitute for bottom water temperature)
 Sim_BotTemp <- rename(Sim_BotTemp, BottomTemp = AirTmp_35d)
 ```
 
@@ -210,10 +202,7 @@ CollectData <- function(FileName = "Segment2_Pdata.xlsx", SheetName = "report"){
   ## Adding a column to classify the P as surface or bottom P
   Seg_P <- Seg_P %>% mutate(P_location = ifelse(Depth<=3,"surface","Bottom"))
   
-  ## Option 1: Selecting only depth, monitoring site and P concentration from Seg_P
-  # Seg_Pdat <- Seg_P[,c("Date","Site","P_location", "P_conc", "Depth" )] %>% drop_na()
-  
-  ## Option 2: Selecting only depth and P concentration from Seg_P
+  ## Selecting only depth and P concentration from Seg_P
   Seg_Pdat <- Seg_P[,c("Date","P_location", "P_conc", "Depth" )] %>% drop_na()
   
   ## Removing diurnal variability
@@ -221,13 +210,6 @@ CollectData <- function(FileName = "Segment2_Pdata.xlsx", SheetName = "report"){
   Seg_Pdat <- Seg_Pdat %>% group_by(Date, P_location) %>% summarise_at(.vars = c("P_conc", "Depth"), .funs = mean)
   
   ## Spreading the data
-  ## Option 1:
-  # Seg_Pdat <- pivot_wider(data = Seg_Pdat,
-  #             id_cols = c(Date,Site),
-  #             names_from = P_location,
-  #             values_from = c("P_conc", "Depth")) %>% drop_na()
-  
-  ## Option 2:
   Seg_Pdat <- pivot_wider(data = Seg_Pdat,
                          id_cols = c(Date),
                          names_from = P_location,
@@ -393,8 +375,6 @@ BoSuP.rf <- randomForest(BoSuP ~ .,
 BoSuP.rf
 
 plot(BoSuP.rf)
-
-# importance(BoSuP.rf)
 
 varImpPlot(BoSuP.rf)
 
@@ -682,7 +662,7 @@ Tot_time4
 ```
 
 
-Although these files were originally saved from Additional025_Stratification_v02082022_RF4.Rmd, we copy the related codes into this notebook as well.
+Saving the model outputs as .csv files for future use.
 ```{r export to excel, echo=TRUE, message=FALSE, warning=FALSE}
 # saving Segment 2 simulated data
 # write.csv(pred.data.2, "DataFiles/predBoSuP_Seg2RF4.csv", append = FALSE)

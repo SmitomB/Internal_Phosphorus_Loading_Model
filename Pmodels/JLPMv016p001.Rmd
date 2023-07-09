@@ -49,11 +49,7 @@ Time required to run the entire notebook: ~3 hrs
 
 
 # Motivation
-The codes in this R notebook are the codes used to prepare the results and discussion in the paper. 
-
-# Edit log
-
-*No new edits since creation*
+The codes in this R notebook are used to simulate the P dynamics in the study period (1983-2018).
 
 # Introduction
 
@@ -125,13 +121,7 @@ options(tibble.width = Inf)
 
 ## loading input files
 
-The data required for this model has been stored in a number of files. These files are stored in other folders such as OutputFiles, DataFiles and RWorkSpaces. Following are the files required to run the model:
-
--   Model Inputs Processed V5.csv
--   PcalMidM_no19v2.RData
--   functionsJorLak_no19.R
--   TP Monthly Watershed Loading_dro 11_15.xlsx
--   lakeOmidM_no19v2.csv
+Let us load the data stored in different repositories to run the model.
 
 *Note:* Please ensure that the working directory is where the project is stored. To change: Tools \> Global Options... \> R Markdown \> Evaluate chunks in directory 'Project'.
 
@@ -194,7 +184,7 @@ obs <- read_csv(data_file) %>%
 
 # Stratification: Surface modifiers
 
-To incorporate stratification in the model indirectly, we developed random forest models for each segment to simulate bottom-to-surface P ratios and the coefficient of determination of the models ranged 0.28 to 0.5. More importantly, the seasonal median of the predicted values were similar to the observed seasonal mean, which gave us confidence to go ahead and use these model.The model outputs are stored in the following csv files:
+To incorporate stratification in the model, we developed random forest models for each segment to simulate bottom-to-surface P ratios and the coefficient of determination of the models ranged 0.28 to 0.5. More importantly, the seasonal median of the predicted values were similar to the observed seasonal mean, which gave us confidence to go ahead and use these model.The model outputs are stored in the following csv files:
 
 -   predBoSuP_Seg2RF4.csv
 -   predBoSuP_Seg3RF4.csv
@@ -244,45 +234,45 @@ for (i in 1:tmax){
 ```
 
 
-# Initial variables
+# Initial P in water and sediments
 
-In the following code, first a time vector was created, the length of which would be equal to tmax. All the vectors will have the same length. Subsequently, a mass vector and a concentration vectors were also created. This vector was initialized as 0 in each elements. The initial values of mass and concentration were stored in separate variables. The initial values are calculated based on the average values calculated in another excel file, lake Sediment P concentration.xlsx.
+In the following code, we assign the initial values of P mass in the water-column and sediment layer. 
 
 ```{r Set up variables, echo=TRUE, message=FALSE, warning=FALSE}
-#set up variables----
-# build numeric model do Euler first
-tOd= (1:tmax)# this will be the timestep variable for running the loop
+#set up variables
+tOd <- (1:tmax)# this will be the timestep variable for running the loop
 timestep  = rep(1,tmax)
+
 #mass predictions will go in these (in kg)
-M1 = rep(NA,tmax)
-M2 = rep(NA,tmax)
-M3 = rep(NA,tmax)
-M4 = rep(NA,tmax)
+M1 <- rep(NA,tmax)
+M2 <- rep(NA,tmax)
+M3 <- rep(NA,tmax)
+M4 <- rep(NA,tmax)
+
 #concentrations in kg/Mm^3 or mg/M^3
-C1 = rep(NA,tmax)
-C2 = rep(NA,tmax)
-C3 = rep(NA,tmax)
-C4 = rep(NA,tmax)
+C1 <- rep(NA,tmax)
+C2 <- rep(NA,tmax)
+C3 <- rep(NA,tmax)
+C4 <- rep(NA,tmax)
 
 #initial state in kg
-M1init = (3120)
-M2init = (4448)
-M3init = (4530)
-M4init = (4390)
+M1init <- (3120)
+M2init <- (4448)
+M3init <- (4530)
+M4init <- (4390)
 
 #new sediment values
-S1init = (.544*10^6)
-S2init = (.589*10^6)
-S3init = (.789*10^6)
-S4init = (.276*10^6)
+S1init <- (.544*10^6)
+S2init <- (.589*10^6)
+S3init <- (.789*10^6)
+S4init <- (.276*10^6)
 
 # Remember: Wsh inflows (Mm3/mo); Conc inputs (mg/m^3)	
 ```
 
 # ODIN Model setup
 
-To know about the basic working of the ODIN package, kindly go through the README file of the package. One can also go through the following link to get a quick brush up of the fundamental concepts:\
-<https://github.ncsu.edu/sborah/JordanLakePmodel/blob/TempBranch1/ODIN-example.md>
+We now setup the model in a format so we can run the ODIN package. 
 
 ```{r Odin Model setup, message=FALSE, warning=FALSE}
 #set up the ODIN model
@@ -410,20 +400,19 @@ Let us set up test parameters to check whether the model is working.
 
 ```{r Settingup the parameters, message=FALSE, warning=FALSE}
 # Scaling factors
-## SSB: The idea of scaling factors is to ensure that all the parameters have similar values when running the MCMC simulations. ## Sh_shift is taken as additive factor rather than multiplicative factor to ensure that the Sh parameter does not become negative during the MCMC run.
 par_scal <- 100
 vs_scal <- 1/100
 Sh_shift <- 1
 
 # test parameters
-Vs = 5*vs_scal #[m/mo/par_scal]
-Ks = 1 #[/mo]
-Bs = .0002*par_scal #[/mo/par_scal]
-Rs = .0002*par_scal #[/mo/par_scal]
+Vs = 5*vs_scal 
+Ks = 1
+Bs = .0002*par_scal 
+Rs = .0002*par_scal 
 Sh = 0.2+Sh_shift
-ThetaR = 1.05 #unitless 
-ThetaV = 1.05 #unitless
-S1fac = 1 #unitless factor
+ThetaR = 1.05  
+ThetaV = 1.05 
+S1fac = 1 
 ```
 
 # Model wrapper function
@@ -468,7 +457,6 @@ inp_lis <- list(V1t = RoutMOdin$V1[1:tmax],
                 Tmpt = RoutMOdin$Temperature[1:tmax])
 
 # Model parameters
-## SSB: creating a list of parameters using the test parameter values
 par_ini <- c(Vs = Vs,Ks=Ks, Bs = Bs,Rs = Rs, Sh=Sh, ThetaR = ThetaR,ThetaV = ThetaV,
              S1fac = S1fac)
 
@@ -478,7 +466,7 @@ mod_wrap_v0 <- function(inp_dat=inp_lis,
                         CalPar=par_ini, 
                         FixInp_lis=Const_lis){
   
-  # SSB: New list of parameters with their values back-transformed
+  
   CalPar_lis <- list(
     Vs= CalPar["Vs"]/vs_scal,Ks= CalPar["Ks"], Bs= CalPar["Bs"]/par_scal,Rs= CalPar["Rs"]/par_scal,
     Sh= CalPar["Sh"]-Sh_shift,
@@ -494,34 +482,35 @@ mod_wrap_v0 <- function(inp_dat=inp_lis,
   y_c <- mod_cmpl$run(tOd, tcrit = tmax)
   
   y_c <- data.frame(y_c)
-  # SSB: create concentration columns that match observation data
+  
+  # Create concentration columns that match observation data
   y_c = merge(x = y_c,y = RoutMOdin[,c(2,3,4,5,6)],by = "t")
   
-  # SSB: adding new columns to the data frame
+  # Adding concentration to the data frame
   y_c$C1 <- (y_c$M1)/RoutMOdin$V1
   
-  # do stratification fix here
+  ## do stratification fix here
   y_c$C2=y_c$M2/RoutMOdin$V2*ConSurM[,"S2"]
   y_c$C3=y_c$M3/RoutMOdin$V3*ConSurM[,"S3"]
   y_c$C4=y_c$M4/RoutMOdin$V4*ConSurM[,"S4"]
   
-  # SSB: creating a data frame that contains only the concentration in the 4 segments
+  # creating a data frame that contains only the concentration in the 4 segments
   y_c <- y_c[,c("yrmo","C1","C2","C3","C4")]
   
-  # SSB: using melt function to convert the columns into rows, taking yrmo as the id.vars
+  # Using melt function to convert the columns into rows, taking yrmo as the id.vars
   outm <- melt(y_c, id.vars = "yrmo")
   
-  # the outm object has the data in the same format as the obs data.
+  # The outm object has the data in the same format as the obs data.
   colnames(outm) <- c("ym","variable","value")
   
-  # the P concentration in the lake and sediments are merged together and presented as tibble
+  # The P concentration in the lake and sediments are merged together and presented as tibble
   outff <- merge(outm, obs, by = c("ym","variable")) %>% as_tibble() 
   return(outff)
 }
 
 
 
-# quick r2 test using test parameter values
+# quick R2 test using test parameter values
 mod_wrap_v0(CalPar=par_ini) %>% {VarExp(.[["value"]],.[["obs"]])}
 ```
 
@@ -529,7 +518,6 @@ mod_wrap_v0(CalPar=par_ini) %>% {VarExp(.[["value"]],.[["obs"]])}
 
 ```{r MCMC setup, echo=TRUE, message=FALSE, warning=FALSE, paged.print=TRUE}
 #Setup MCMC
-# DDG: now we can easily test effect of different parameters on model output
 test <- c(Vs = 5*vs_scal,
           Ks = 1,
           Bs = .0002*par_scal,# DDG: note, this is too close to 0
@@ -545,10 +533,6 @@ test <- c(Vs = 5*vs_scal,
 # save obs data for use in likelihood
 obs_dat <- mod_wrap_v0(CalPar=test) %>% pull(obs)
 
-
-# DDG: moved functions to other script that can be sourced (earlier)
-
-#Dario's MCMC set-up process & log transform
 # define prior distributions
 priors<- list(
   Vs =c("truncnorm", 0, Inf, 1.3*vs_scal,sd = 1.4*vs_scal),# DDG: notice scaling
@@ -590,7 +574,7 @@ The MCMC model was ran for 100000 iterations.
 
 ```{r MCMC model run, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 # Defne number of iterations and burnin
-n.iter=100000                        
+n.iter= 100000                        
 
 # starting the timer
 start.time = Sys.time()
@@ -600,13 +584,12 @@ set.seed(eff_se1)
 
 # MCMC run
 RAM <- MCMC(p     = logpost, #objective function
-            init  = prev_opt*rnorm(length(test),1,.02), #vector of initial values
-            scale = ini.jump.cov, #covariance of the jump distribution
-            n     = n.iter, #iterations
-            adapt = T, #adaptive sampling is used (true or false
-            acc.rate = 0.3,  #acceptance rate
-            n.start = 50, #internal argument defining after which iteration adaptation is applied
-            # ancillary logpost arguments: could be hardcoded, if preferred
+            init  = prev_opt*rnorm(length(test),1,.02), # vector of initial values
+            scale = ini.jump.cov, # covariance of the jump distribution
+            n     = n.iter, # iterations
+            adapt = T, # adaptive sampling is used 
+            acc.rate = 0.3,  # acceptance rate
+            n.start = 50, # internal argument defining after which iteration adaptation is applied
             priors=priors,mod_fun=mod_wrap_v0,
             yObs=obs_dat,lambda1=l1,lambda2=l2
 )
@@ -617,6 +600,8 @@ end.time = Sys.time()
 # Time taken to run the MCMC simulation
 time.taken.MCMC <- end.time - start.time
 ```
+
+
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Temporary save
 save.image("RWorkSpaces/JLPMv016p001_0.RData")
@@ -627,7 +612,8 @@ save.image("RWorkSpaces/JLPMv016p001_0.RData")
 ```{r MCMC results, echo=TRUE, message=FALSE, warning=FALSE}
 # Time taken to run the model
 time.taken.MCMC 
-# rief analysis of results
+
+# brief analysis of results
 cbind(RAM$samples,logpost= RAM$log.p) %>% as_tibble() %>% 
   mutate(Vs=Vs/vs_scal,Bs=Bs/par_scal,Rs=Rs/par_scal,Sh = Sh-Sh_shift) %>% tail(25000) %>% 
   as.matrix %>% sysanal.plot.chains()
@@ -672,7 +658,7 @@ output_prm
 With the updated the parameters, the model is ran again to determine the phosphorus concentrations in the water column and sediments of the Jordan lake.
 
 ```{r}
-#create output file using new model formulation
+# Create output file using new model formulation
 CalPar_lis <- list(
   Vs= output_prm["Vs"],Ks= output_prm["Ks"],Bs= output_prm["Bs"],Rs= output_prm["Rs"],
   Sh= output_prm["Sh"],
@@ -684,19 +670,19 @@ mod_cmpl <- suppressWarnings(lakemod_v0(user=OmnInp))
 y_c <- mod_cmpl$run(tOd, tcrit = tmax)
 y_c <- data.frame(y_c)
 
-#create concentration columns that match observation data
+# Create concentration columns that match observation data
 y_c = merge(x = y_c,y = RoutMOdin[,c(2,3,4,5,6)],by = "t")
 y_c$C1 <- (y_c$M1)/RoutMOdin$V1
 y_c$C2all <- (y_c$M2)/RoutMOdin$V2
 y_c$C3all <- (y_c$M3)/RoutMOdin$V3
 y_c$C4all <- (y_c$M4)/RoutMOdin$V4
 
-#do stratification fix here
+# Do stratification fix here
 y_c$C2=y_c$M2/RoutMOdin$V2*ConSurM[,"S2"]
 y_c$C3=y_c$M3/RoutMOdin$V3*ConSurM[,"S3"]
 y_c$C4=y_c$M4/RoutMOdin$V4*ConSurM[,"S4"]
 
-#evaluate results, keep this in the code!
+# Evaluate results, keep this in the code!
 y_c_eval <- y_c[,c("yrmo","C1","C2","C3","C4")]
 outm <- suppressWarnings(melt(y_c_eval, id.vars = "yrmo"))
 colnames(outm) <- c("ym","variable","value")
@@ -708,10 +694,10 @@ testLm = lm(obs~value,data = outff)
 summary(testLm)
 plot(outff$value,outff$obs)
 
-#coeff of determination, R2
+# Coeff of determination, R2
 VarExp(outff[,"value"],outff[,"obs"])
 
-######assemble the file
+# Assemble the file
 MassFlows = y_c
 colnames(MassFlows) = c("t",
                         "M1","M2","M3","M4",
@@ -720,40 +706,40 @@ colnames(MassFlows) = c("t",
                         "C1","C2","C3","C4",
                         "C2sur", "C3sur","C4sur")
 
-#Input loadings to Segments
+# Input loadings to Segments
 MassFlows$Seg1in = RoutMOdin$C1in*RoutMOdin$Q1in*(1-output_prm["Sh"])
 MassFlows$Seg2in = RoutMOdin$C2in*RoutMOdin$Q2in*(1-output_prm["Sh"])
 MassFlows$Seg3in = RoutMOdin$C3in*RoutMOdin$Q3in*(1-output_prm["Sh"])
 MassFlows$Seg4in = RoutMOdin$C4in*RoutMOdin$Q4in*(1-output_prm["Sh"])
 
-#Net Flows between Segments
+# Net Flows between Segments
 MassFlows$Seg12 = MassFlows$C1*RoutMOdin$Q12 - MassFlows$C2*RoutMOdin$Q21
 MassFlows$Seg23 = MassFlows$C2*RoutMOdin$Q23 - MassFlows$C3*RoutMOdin$Q32
 MassFlows$Seg34 = MassFlows$C3*RoutMOdin$Q34 - MassFlows$C4*RoutMOdin$Q43
 MassFlows$outflow = MassFlows$C4*RoutMOdin$Q4out
 
-#Loading to Sediments
+# Loading to Sediments
 MassFlows$S1set = MassFlows$C1*(opt_prm["Ks"]*RoutMOdin$V1+output_prm["Vs"]*RoutMOdin$A1)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
 MassFlows$S2set = MassFlows$C2*(opt_prm["Ks"]*RoutMOdin$V2+output_prm["Vs"]*RoutMOdin$A2)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
 MassFlows$S3set = MassFlows$C3*(opt_prm["Ks"]*RoutMOdin$V3+output_prm["Vs"]*RoutMOdin$A3)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
 MassFlows$S4set = MassFlows$C4*(opt_prm["Ks"]*RoutMOdin$V4+output_prm["Vs"]*RoutMOdin$A4)*(output_prm["ThetaV"]^(RoutMOdin$Temperature-20))
 
-#resuspension of sediment TP
+# Resuspension of sediment TP
 MassFlows$S1res = (MassFlows$S1*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
 MassFlows$S2res = (MassFlows$S2*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
 MassFlows$S3res = (MassFlows$S3*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
 MassFlows$S4res = (MassFlows$S4*output_prm["Rs"])*(output_prm["ThetaR"]^(RoutMOdin$Temperature-20))
 
-#Permanent Burial Rate
+# Permanent Burial Rate
 MassFlows$S1Bur = MassFlows$S1*output_prm["Bs"]
 MassFlows$S2Bur = MassFlows$S2*output_prm["Bs"]
 MassFlows$S3Bur = MassFlows$S3*output_prm["Bs"]
 MassFlows$S4Bur = MassFlows$S4*output_prm["Bs"]
 
-#temperature
+# Temperature
 MassFlows$Temp = RoutMOdin$Temperature
 
-#cleanup
+# Cleanup
 MassFlows = MassFlows[,c(1,12,13,10,
                         2,3,4,5,
                         6,7,8,9,
@@ -771,6 +757,7 @@ We calculate the coefficient of determination (R^2^) and root mean square error 
 # Overeall model performance
 ## Coefficient of determination
 AllR2 <- VarExp(outff[,"value"],outff[,"obs"])
+
 ##  Root mean Square Error
 AllRMSE <- sqrt(mean((outff$value - outff$obs)^2))/1000 # Units: mg/L
 
